@@ -11,9 +11,10 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.9+-3776AB?style=flat&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/docker-ready-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/flask-3.x-000000?style=flat&logo=flask&logoColor=white" alt="Flask" />
   <img src="https://img.shields.io/badge/react-18-61DAFB?style=flat&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat" alt="MIT License" />
+  <img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat" alt="GPL-3.0 License" />
 </p>
 
 ---
@@ -78,23 +79,47 @@ Mutify parses standard and extended `.m3u` / `.m3u8` playlist files exported fro
 
 ## Quick Start
 
-### 1. Clone Repository
+### Option A: Docker (Recommended)
+
+Run Mutify instantly with Docker or Docker Compose without installing Python or dependencies:
+
+#### Using Docker Compose
 ```bash
+# Clone the repository
 git clone https://github.com/your-username/mutify.git
 cd mutify
+
+# Start container in background
+docker compose up -d
 ```
 
-### 2. Install Dependencies
+#### Using Docker CLI
 ```bash
+# Build and run container
+docker build -t mutify .
+docker run -d -p 5099:5099 --name mutify mutify
+```
+
+Open **`http://127.0.0.1:5099`** in your browser.
+
+---
+
+### Option B: Local Python Installation
+
+If you prefer running directly on your host machine:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/your-username/mutify.git
+cd mutify
+
+# 2. Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Run the Application
-```bash
+# 3. Run application
 python app.py
 ```
 
-### 4. Open in Browser
 Navigate to **`http://127.0.0.1:5099`**.
 
 ---
@@ -123,6 +148,8 @@ Navigate to **`http://127.0.0.1:5099`**.
 ```
 mutify/
 ├── app.py                      # Flask server, OAuth routes, & API handlers
+├── Dockerfile                  # Production container definition
+├── docker-compose.yml          # One-command orchestration
 ├── requirements.txt            # Project dependencies
 ├── assets/                     # Official brand vector SVGs and UI screenshots
 ├── templates/
@@ -139,10 +166,10 @@ mutify/
 
 ## AI Assistance & Development
 
-This codebase was designed and developed with **AI pair-programming assistance** using **Google DeepMind Antigravity**, adhering to clean architectural patterns, provider abstraction layers, and modern UI/UX design standards.
+This codebase was designed and developed with **AI pair-programming assistance** using **Google Antigravity**, adhering to clean architectural patterns, provider abstraction layers, and modern UI/UX design standards.
 
 ---
 
 ## License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+Distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [`LICENSE`](LICENSE) for more information.

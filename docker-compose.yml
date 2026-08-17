@@ -1,0 +1,9 @@
+services:
+  mutify:
+    build: .
+    container_name: mutify
+    restart: unless-stopped
+    ports:
+      - "5099:5099"
+    volumes:
+      - ./config.json:/app/config.json

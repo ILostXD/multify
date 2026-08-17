@@ -22,6 +22,7 @@ from typing import Dict, Any
 
 import requests
 from flask import Flask, request, session, redirect, jsonify, render_template, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 try:
     from mutagen import File as MutagenFile
@@ -32,8 +33,29 @@ from providers.registry import PROVIDERS, get_provider
 import tidalapi
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
-app.permanent_session_lifetime = timedelta(days=7)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+def _get_or_create_secret_key() -> str:
+    """Ensure all Gunicorn workers and restarts share a persistent, stable secret key."""
+    env_key = os.environ.get("FLASK_SECRET_KEY")
+    if env_key:
+        return env_key
+    try:
+        cfg = load_config()
+        if cfg.get("flask_secret_key"):
+            return cfg["flask_secret_key"]
+        new_key = secrets.token_hex(32)
+        save_config({"flask_secret_key": new_key})
+        return new_key
+    except Exception:
+        return "multify_persistent_fallback_secret_key_v1"
+
+app.secret_key = _get_or_create_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+)
 
 def get_config_file_path() -> str:
     """Resolve the actual config file path, safely handling Docker directory volume mounts."""
@@ -173,7 +195,7 @@ def update_settings():
 
 @app.route("/login")
 def login():
-    session.clear()
+    session.permanent = True
     cfg = load_config()
     client_id = cfg.get("spotify_client_id")
     redirect_uri = cfg.get("spotify_redirect_uri", "http://127.0.0.1:5099/callback")

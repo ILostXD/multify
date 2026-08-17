@@ -86,7 +86,7 @@ Run Mutify instantly with Docker or Docker Compose without installing Python or 
 #### Using Docker Compose
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/mutify.git
+git clone https://github.com/ILostXD/mutify.git
 cd mutify
 
 # Start container in background
@@ -110,7 +110,7 @@ If you prefer running directly on your host machine:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-username/mutify.git
+git clone https://github.com/ILostXD/mutify.git
 cd mutify
 
 # 2. Install dependencies

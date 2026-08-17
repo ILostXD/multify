@@ -49,7 +49,7 @@ Live status badges, album art previews, and dropdown candidate selector with man
 Tabbed credential management for Spotify OAuth, YouTube Music session headers, and Tidal device authorization.
 
 <p align="center">
-  <img src="assets/Settings.png" alt="Streaming Provider Settings" width="540" />
+  <img src="assets/Settings.png" alt="Streaming Provider Settings" width="800" />
 </p>
 
 ---

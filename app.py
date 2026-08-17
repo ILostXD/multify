@@ -35,7 +35,20 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 app.permanent_session_lifetime = timedelta(days=7)
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
+def get_config_file_path() -> str:
+    """Resolve the actual config file path, safely handling Docker directory volume mounts."""
+    target = os.environ.get("CONFIG_FILE") or os.path.join(os.path.dirname(__file__), "config.json")
+    if os.path.isdir(target):
+        return os.path.join(target, "config.json")
+    parent = os.path.dirname(target)
+    if parent and not os.path.exists(parent):
+        try:
+            os.makedirs(parent, exist_ok=True)
+        except Exception:
+            pass
+    return target
+
+CONFIG_FILE = get_config_file_path()
 
 def load_config() -> Dict[str, Any]:
     """Load settings from config.json with fallback to environment variables."""
@@ -50,15 +63,16 @@ def load_config() -> Dict[str, Any]:
         "tidal_refresh_token": "",
         "tidal_expiry_time": "",
     }
-    if os.path.isfile(CONFIG_FILE):
+    cfg_file = get_config_file_path()
+    if os.path.isfile(cfg_file):
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(cfg_file, "r", encoding="utf-8") as f:
                 saved = json.load(f)
                 for k, v in saved.items():
                     if v is not None:
                         cfg[k] = v
         except Exception as e:
-            app.logger.warning(f"Failed to read config.json: {e}")
+            app.logger.warning(f"Failed to read config file ({cfg_file}): {e}")
     return cfg
 
 def save_config(new_cfg: Dict[str, Any]) -> bool:
@@ -66,11 +80,12 @@ def save_config(new_cfg: Dict[str, Any]) -> bool:
     try:
         current = load_config()
         current.update(new_cfg)
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        cfg_file = get_config_file_path()
+        with open(cfg_file, "w", encoding="utf-8") as f:
             json.dump(current, f, indent=2)
         return True
     except Exception as e:
-        app.logger.error(f"Failed to save config.json: {e}")
+        app.logger.error(f"Failed to save config file ({get_config_file_path()}): {e}")
         return False
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"

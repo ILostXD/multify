@@ -32,3 +32,6 @@ mutify_*_missing.txt
 *.swo
 .DS_Store
 Thumbs.db
+
+# Docker persistent data directory
+data/

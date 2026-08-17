@@ -6,4 +6,6 @@ services:
     ports:
       - "5099:5099"
     volumes:
-      - ./config.json:/app/config.json
+      - ./data:/app/data
+    environment:
+      - CONFIG_FILE=/app/data/config.json

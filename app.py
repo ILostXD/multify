@@ -50,7 +50,7 @@ def load_config() -> Dict[str, Any]:
         "tidal_refresh_token": "",
         "tidal_expiry_time": "",
     }
-    if os.path.exists(CONFIG_FILE):
+    if os.path.isfile(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 saved = json.load(f)

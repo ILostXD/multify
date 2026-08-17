@@ -1,0 +1,2297 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mutify</title>
+
+  <!-- Browser Favicon: Custom SVG Logo -->
+  <link rel="icon" type="image/svg+xml" href="/assets/Mutify_BG_Color_Logo.svg">
+  <link rel="alternate icon" href="/favicon.ico">
+
+  <!-- Google Fonts: Sora (Bolder weights: 400, 600, 700, 800) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- React 18 & Babel for JSX -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* ── Core Design System & Color Tokens ── */
+    :root[data-theme="light"] {
+      --text: #050316;
+      --background: #fbfbfe;
+      --primary: #46e27c;
+      --secondary: #c8fedc;
+      --accent: #12c424;
+      --card-bg: rgba(255, 255, 255, 0.78);
+      --card-border: rgba(255, 255, 255, 0.95);
+      --card-border-subtle: rgba(5, 3, 22, 0.08);
+      --modal-card-bg: rgba(255, 255, 255, 0.92);
+      --modal-card-border: rgba(255, 255, 255, 1);
+      --overlay-bg: rgba(15, 23, 42, 0.28);
+      --glass-shadow: 0 16px 40px -8px rgba(5, 3, 22, 0.12);
+      --glass-specular: inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.95);
+      --dock-bg: rgba(255, 255, 255, 0.9);
+      --dock-border: rgba(255, 255, 255, 0.95);
+      --text-muted: #565467;
+      --input-bg: rgba(244, 245, 248, 0.92);
+      --input-border: rgba(5, 3, 22, 0.12);
+      --row-bg: rgba(255, 255, 255, 0.7);
+      --row-hover-bg: rgba(255, 255, 255, 0.95);
+      --orb-1: rgba(70, 226, 124, 0.28);
+      --orb-2: rgba(200, 254, 220, 0.55);
+      --orb-3: rgba(18, 196, 36, 0.18);
+      --warning: #d97706;
+      --warning-bg: rgba(217, 119, 6, 0.12);
+      --warning-border: rgba(217, 119, 6, 0.35);
+      --danger: #dc2626;
+      --danger-bg: rgba(220, 38, 38, 0.1);
+      --danger-border: rgba(220, 38, 38, 0.35);
+      --success: #16a34a;
+      --success-bg: rgba(22, 163, 74, 0.12);
+      --success-border: rgba(22, 163, 74, 0.35);
+    }
+
+    :root[data-theme="dark"] {
+      --text: #ebe9fc;
+      --background: #010104;
+      --primary: #1db954;
+      --secondary: #013514;
+      --accent: #39ed4b;
+      --card-bg: rgba(15, 21, 17, 0.72);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --card-border-subtle: rgba(255, 255, 255, 0.06);
+      --modal-card-bg: rgba(16, 22, 18, 0.9);
+      --modal-card-border: rgba(255, 255, 255, 0.16);
+      --overlay-bg: rgba(0, 0, 0, 0.72);
+      --glass-shadow: 0 18px 44px -8px rgba(0, 0, 0, 0.7);
+      --glass-specular: inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.18);
+      --dock-bg: rgba(12, 18, 14, 0.88);
+      --dock-border: rgba(255, 255, 255, 0.18);
+      --text-muted: #9593aa;
+      --input-bg: rgba(6, 10, 8, 0.75);
+      --input-border: rgba(255, 255, 255, 0.12);
+      --row-bg: rgba(255, 255, 255, 0.035);
+      --row-hover-bg: rgba(255, 255, 255, 0.075);
+      --orb-1: rgba(29, 185, 84, 0.22);
+      --orb-2: rgba(1, 53, 20, 0.45);
+      --orb-3: rgba(57, 237, 75, 0.15);
+      --warning: #fbbf24;
+      --warning-bg: rgba(251, 191, 36, 0.12);
+      --warning-border: rgba(251, 191, 36, 0.4);
+      --danger: #f87171;
+      --danger-bg: rgba(248, 113, 113, 0.12);
+      --danger-border: rgba(248, 113, 113, 0.4);
+      --success: #34d399;
+      --success-bg: rgba(52, 211, 153, 0.12);
+      --success-border: rgba(52, 211, 153, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background: var(--background);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      transition: background 0.3s ease, color 0.3s ease;
+      position: relative;
+    }
+
+    /* ── High-Performance Hardware-Isolated Ambient Canvas ── */
+    .ambient-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+      contain: strict;
+      transform: translate3d(0, 0, 0);
+    }
+
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(85px);
+      opacity: 0.8;
+      will-change: transform;
+      transform: translate3d(0, 0, 0);
+      backface-visibility: hidden;
+      animation: float 24s infinite ease-in-out alternate;
+    }
+
+    .orb-1 {
+      width: 500px;
+      height: 500px;
+      background: var(--orb-1);
+      top: -100px;
+      left: -80px;
+      animation-duration: 26s;
+    }
+
+    .orb-2 {
+      width: 460px;
+      height: 460px;
+      background: var(--orb-2);
+      bottom: -120px;
+      right: -60px;
+      animation-duration: 30s;
+      animation-delay: -6s;
+    }
+
+    .orb-3 {
+      width: 360px;
+      height: 360px;
+      background: var(--orb-3);
+      top: 35%;
+      left: 55%;
+      animation-duration: 22s;
+      animation-delay: -11s;
+    }
+
+    @keyframes float {
+      0% {
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+      50% {
+        transform: translate3d(40px, 30px, 0) scale(1.06);
+      }
+      100% {
+        transform: translate3d(-30px, 50px, 0) scale(0.96);
+      }
+    }
+
+    /* ── Main Container ── */
+    .app-root {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 9rem;
+      animation: appFadeIn 0.3s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    @keyframes appFadeIn {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 6px, 0);
+      }
+      to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+      }
+    }
+
+    /* ── Top-Level Liquid Glass Card Base ── */
+    .liquid-glass {
+      background: var(--card-bg);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--glass-shadow), var(--glass-specular);
+      border-radius: 20px;
+      transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1),
+                  box-shadow 0.22s cubic-bezier(0.2, 0, 0, 1),
+                  background 0.22s ease;
+    }
+
+    /* ── Top Header Navigation ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      text-decoration: none;
+    }
+
+    .brand-logo-disc {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      min-height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 18px -3px var(--primary);
+      transition: box-shadow 0.22s ease, transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+      flex-shrink: 0;
+      padding: 0;
+      line-height: 0;
+    }
+
+    .brand-logo-disc:hover {
+      transform: translateY(-1px) scale(1.05);
+      box-shadow: 0 10px 24px -2px var(--primary);
+    }
+
+    .brand-title {
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: linear-gradient(120deg, var(--text) 40%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1.2;
+    }
+
+    .brand-tagline {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    /* ── Destination Service Selector Bar ── */
+    .destination-selector-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.65rem 1rem;
+      margin-bottom: 1.5rem;
+      border-radius: 16px;
+    }
+
+    .dest-pills-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .dest-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.45rem 0.95rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid var(--card-border-subtle);
+      background: var(--input-bg);
+      color: var(--text-muted);
+      transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .dest-pill:hover {
+      transform: translateY(-1px);
+      color: var(--text);
+      background: var(--row-hover-bg);
+    }
+
+    .dest-pill.active {
+      background: var(--input-bg);
+      color: var(--text);
+      border: 1.5px solid var(--text);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), var(--glass-specular);
+    }
+
+    .dest-pill.active.spotify {
+      border-color: #1db954;
+      box-shadow: 0 4px 18px -2px rgba(29, 185, 84, 0.45), var(--glass-specular);
+      color: var(--text);
+    }
+
+    .dest-pill.active.ytmusic {
+      border-color: #ff0000;
+      box-shadow: 0 4px 18px -2px rgba(255, 0, 0, 0.45), var(--glass-specular);
+      color: var(--text);
+    }
+
+    .dest-pill.active.tidal {
+      border-color: #00ffff;
+      box-shadow: 0 4px 18px -2px rgba(0, 255, 255, 0.45), var(--glass-specular);
+      color: var(--text);
+    }
+
+    /* ── Action Buttons ── */
+    .glass-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.55rem;
+      padding: 0.6rem 1.2rem;
+      border-radius: 999px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid var(--card-border);
+      background: var(--card-bg);
+      color: var(--text);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: var(--glass-shadow), var(--glass-specular);
+      transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1),
+                  box-shadow 0.2s ease,
+                  background 0.2s ease;
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    .glass-btn:hover {
+      transform: translateY(-2px);
+      color: var(--text);
+      box-shadow: 0 8px 22px -3px rgba(0, 0, 0, 0.3), var(--glass-specular);
+    }
+
+    .glass-btn:active {
+      transform: translateY(0) scale(0.97);
+    }
+
+    .glass-btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: #000 !important;
+      border: none;
+      box-shadow: 0 6px 18px -3px var(--primary);
+    }
+
+    .glass-btn-primary:hover {
+      box-shadow: 0 12px 28px -3px var(--primary);
+      transform: translateY(-2px) scale(1.02);
+    }
+
+    .glass-btn-primary:active {
+      transform: translateY(0) scale(0.97);
+    }
+
+    .glass-btn-ytmusic {
+      background: linear-gradient(135deg, #ff0000, #cc0000);
+      color: #fff !important;
+      border: none;
+      box-shadow: 0 6px 18px -3px rgba(255, 0, 0, 0.6);
+    }
+
+    .glass-btn-ytmusic:hover {
+      box-shadow: 0 12px 28px -3px rgba(255, 0, 0, 0.8);
+      transform: translateY(-2px) scale(1.02);
+    }
+
+    .glass-btn-tidal {
+      background: linear-gradient(135deg, #00ffff, #00b3b3);
+      color: #000 !important;
+      border: none;
+      box-shadow: 0 6px 18px -3px rgba(0, 255, 255, 0.6);
+    }
+
+    .glass-btn-tidal:hover {
+      box-shadow: 0 12px 28px -3px rgba(0, 255, 255, 0.8);
+      transform: translateY(-2px) scale(1.02);
+    }
+
+    .glass-btn-primary:disabled, .glass-btn-ytmusic:disabled, .glass-btn-tidal:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .glass-btn-danger {
+      color: var(--danger) !important;
+      border-color: var(--danger-border);
+      background: var(--danger-bg);
+    }
+
+    .glass-btn-danger:hover {
+      color: var(--danger) !important;
+      background: rgba(220, 38, 38, 0.22);
+      border-color: var(--danger-border);
+      box-shadow: 0 6px 18px -3px rgba(220, 38, 38, 0.35), var(--glass-specular);
+      transform: translateY(-2px);
+    }
+
+    /* ── Precise Icon Buttons ── */
+    .icon-btn {
+      width: 38px !important;
+      height: 38px !important;
+      min-width: 38px !important;
+      min-height: 38px !important;
+      padding: 0 !important;
+      border-radius: 50% !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 0 !important;
+      line-height: 0 !important;
+      text-align: center !important;
+      flex-shrink: 0 !important;
+      transform: none !important;
+      transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s cubic-bezier(0.2, 0, 0, 1) !important;
+    }
+
+    .icon-btn:hover {
+      transform: scale(1.05) !important;
+      box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.3), var(--glass-specular) !important;
+      background: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.93) !important;
+    }
+
+    .icon-wrapper {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      line-height: 0;
+    }
+
+    .icon-wrapper svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Landing Hero Cards (Spotify / YouTube Music / Tidal) ── */
+    .hero-landing-card {
+      padding: 3.2rem 1.75rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .hero-landing-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .service-hero-logo-box {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+      cursor: pointer;
+      transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .service-hero-logo-box:hover {
+      transform: scale(1.05);
+    }
+
+    .service-hero-logo-svg {
+      transition: filter 0.22s ease;
+    }
+
+    .spotify-logo {
+      filter: drop-shadow(0 8px 24px var(--primary));
+    }
+    .service-hero-logo-box:hover .spotify-logo {
+      filter: drop-shadow(0 14px 34px var(--primary));
+    }
+
+    .ytmusic-logo {
+      filter: drop-shadow(0 8px 24px rgba(255, 0, 0, 0.65));
+    }
+    .service-hero-logo-box:hover .ytmusic-logo {
+      filter: drop-shadow(0 14px 34px rgba(255, 0, 0, 0.9));
+    }
+
+    .tidal-logo {
+      filter: drop-shadow(0 8px 26px rgba(0, 255, 255, 0.55));
+    }
+    .service-hero-logo-box:hover .tidal-logo {
+      filter: drop-shadow(0 14px 36px rgba(0, 255, 255, 0.85));
+    }
+
+    /* ── Dropzone Card ── */
+    .dropzone-card {
+      padding: 2.3rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      border: 1.5px dashed var(--card-border);
+      margin-bottom: 1.5rem;
+      transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.2, 0, 0, 1), border-color 0.2s ease;
+    }
+
+    .dropzone-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 42px -6px rgba(0, 0, 0, 0.32), var(--glass-specular);
+      background: var(--row-hover-bg);
+    }
+
+    .dropzone-card:hover .dropzone-icon-ring {
+      transform: scale(1.06);
+    }
+
+    .dropzone-card.dragover {
+      background: rgba(29, 185, 84, 0.1);
+      border-color: var(--primary);
+    }
+
+    .dropzone-icon-ring {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1rem;
+      color: var(--primary);
+      box-shadow: var(--glass-specular);
+      transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    .dropzone-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+    }
+
+    .dropzone-sub {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    /* ── Stats Glass Counter Bar ── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-tile {
+      padding: 0.9rem 1.1rem;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      transition: background 0.18s ease, transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.18s ease;
+    }
+
+    .stat-tile:hover {
+      background: var(--row-hover-bg);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.25), var(--glass-specular);
+    }
+
+    .stat-icon-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .stat-number {
+      font-size: 1.25rem;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-top: 0.2rem;
+    }
+
+    /* ── Playlist Name Input ── */
+    .input-card {
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.9rem;
+      transition: box-shadow 0.2s ease;
+    }
+
+    .input-card:focus-within {
+      box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.3), var(--glass-shadow);
+    }
+
+    .glass-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .glass-input::placeholder {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* ── High-Performance GPU-Optimized Track Row ── */
+    .track-row {
+      padding: 0.85rem 1rem;
+      border-radius: 16px;
+      margin-bottom: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--row-bg);
+      border: 1px solid var(--card-border-subtle);
+      box-shadow: var(--glass-specular);
+      transition: background 0.18s ease;
+    }
+
+    .track-row:hover {
+      background: var(--row-hover-bg);
+    }
+
+    .track-row.status-matched {
+      border-left: 4px solid var(--primary);
+    }
+
+    .track-row.status-review {
+      border-left: 4px solid var(--warning);
+    }
+
+    .track-row.status-skipped {
+      border-left: 4px solid var(--text-muted);
+      opacity: 0.65;
+    }
+
+    .track-row.status-unmatched {
+      border-left: 4px solid var(--danger);
+    }
+
+    .track-thumbnail-box {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border-subtle);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+    }
+
+    .track-thumbnail-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .track-meta {
+      flex: 0 0 210px;
+      min-width: 0;
+    }
+
+    .track-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .track-artist {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 0.15rem;
+    }
+
+    .track-selector-box {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .glass-select {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 0.55rem 0.8rem;
+      color: var(--text);
+      font-size: 0.84rem;
+      font-weight: 600;
+      outline: none;
+      cursor: pointer;
+      box-shadow: var(--glass-specular);
+      transition: box-shadow 0.18s ease;
+    }
+
+    .glass-select:focus {
+      box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.3);
+    }
+
+    .glass-select option {
+      background: #121614;
+      color: #ebe9fc;
+    }
+
+    /* ── Floating Action Dock ── */
+    .floating-dock-container {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      z-index: 99;
+      pointer-events: none;
+      padding: 0 1rem;
+    }
+
+    .floating-dock {
+      pointer-events: auto;
+      background: var(--dock-bg);
+      backdrop-filter: blur(28px) saturate(200%);
+      -webkit-backdrop-filter: blur(28px) saturate(200%);
+      border: 1px solid var(--dock-border);
+      box-shadow: 0 18px 45px -8px rgba(0, 0, 0, 0.55), var(--glass-specular);
+      border-radius: 999px;
+      padding: 0.6rem 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      max-width: 95vw;
+      animation: dockSlideUp 0.3s cubic-bezier(0.2, 0, 0, 1);
+      transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1),
+                  box-shadow 0.22s ease;
+    }
+
+    .floating-dock:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 24px 55px -8px rgba(0, 0, 0, 0.65), var(--glass-specular);
+    }
+
+    @keyframes dockSlideUp {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 20px, 0);
+      }
+      to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+      }
+    }
+
+    .dock-pill-stats {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0 0.5rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .dock-pill-stats b {
+      color: var(--text);
+    }
+
+    /* ── Settings Modal Overlay & Tabs ── */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--overlay-bg);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      animation: modalFadeIn 0.2s ease;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .settings-modal-card {
+      width: 100%;
+      max-width: 540px;
+      padding: 2rem 1.75rem;
+      position: relative;
+      background: var(--modal-card-bg);
+      border: 1px solid var(--modal-card-border);
+      box-shadow: var(--glass-shadow), var(--glass-specular);
+      border-radius: 20px;
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      animation: modalPop 0.25s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    @keyframes modalPop {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translate3d(0, 8px, 0);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translate3d(0, 0, 0);
+      }
+    }
+
+    .modal-tab-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--card-border-subtle);
+      padding-bottom: 0.6rem;
+    }
+
+    .modal-tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      font-weight: 700;
+      padding: 0.45rem 0.85rem;
+      border-radius: 999px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.18s ease;
+    }
+
+    .modal-tab-btn:hover {
+      color: var(--text);
+      background: var(--row-hover-bg);
+    }
+
+    .modal-tab-btn.active {
+      color: var(--text);
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      box-shadow: var(--glass-specular);
+    }
+
+    .settings-field-group {
+      margin-bottom: 1.2rem;
+    }
+
+    .settings-label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.4rem;
+    }
+
+    .settings-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px;
+      padding: 0.65rem 0.85rem;
+      box-shadow: var(--glass-specular);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .settings-input-wrapper:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.25), var(--glass-specular);
+    }
+
+    .settings-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .settings-textarea {
+      width: 100%;
+      min-height: 95px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 0.82rem;
+      font-family: monospace;
+      resize: vertical;
+    }
+
+    /* ── Progress & Alerts ── */
+    .progress-bar-card {
+      padding: 0.9rem 1.25rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .spinner {
+      animation: spin 0.85s linear infinite;
+    }
+
+    @keyframes spin {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── Responsive adjustments ── */
+    @media (max-width: 640px) {
+      .track-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .track-meta {
+        flex: none;
+      }
+      .floating-dock {
+        flex-wrap: wrap;
+        border-radius: 24px;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="ambient-canvas">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div id="root" data-logged-in="{{ 'true' if logged_in else 'false' }}"></div>
+
+  <!-- Lucide Vector Icon Component & React App -->
+  <script type="text/babel">
+  {% raw %}
+    const rootEl = document.getElementById('root');
+    const initialLoggedIn = rootEl ? rootEl.getAttribute('data-logged-in') === 'true' : false;
+
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    /* ── Mutify SVG Brand Logo Component (from Mutify_Logo.svg) ── */
+    function MutifyLogo({ size = 26, color = "#000000", style = {} }) {
+      return (
+        <svg width={size} height={size} viewBox="0 0 3000 3000" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', transform: 'translateY(-0.75px)', ...style }}>
+          <path d="M1500.01,1561.89c-163.78-336.06-289.34-669.058-325.53-977.411H592.511C217.574,1169.15,1.01,1842.44,24.6,2457.15H637.937c-26.2-1147.09,37.972-2277.819,185.669-1410.77,55.915,328.24,209.454,675.07,383.784,1010.12,4.8,9.23,272.81,6.57,285.61,6.5m6.99-501.11c163.78-336.06,289.34-669.058,325.53-977.411h581.97c374.94,584.671,591.5,1257.961,567.91,1872.671H2362.06c26.2-1147.09-37.97-2277.819-185.67-1410.77-55.91,328.24-209.45,675.07-383.78,1010.12-4.8,9.23-286.81,6.57-299.61,6.5" fill={color} fillRule="evenodd" />
+        </svg>
+      );
+    }
+
+    /* ── Official Service Vector Logos (from assets) ── */
+    function SpotifyLogo({ size = 80, className = "" }) {
+      return (
+        <svg className={`service-hero-logo-svg spotify-logo ${className}`} width={size} height={size} viewBox="0 0 1000 1000" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+          <path d="M 519.83691,0.40204111 C 243.89495,-10.566117 11.324418,204.22689 0.40196015,480.16716 -10.56619,756.10802 204.27254,988.63153 480.16822,999.60014 756.10908,1010.5687 988.63259,795.77668 999.6012,519.83586 1010.5241,243.89502 795.72919,11.324491 519.83691,0.40204111 Z M 730.88041,732.84507 c -6.21431,10.96861 -18.32578,16.45433 -30.11722,14.80861 -3.60862,-0.50276 -7.22003,-1.69138 -10.60006,-3.61144 -66.08302,-37.61156 -138.10896,-62.10592 -214.06349,-72.80023 -75.95453,-10.6943 -151.95474,-6.9914 -225.8521,10.96862 -16.0412,3.88289 -32.17353,-5.94289 -36.05783,-21.98292 -3.88458,-16.04005 5.94088,-32.17438 21.98178,-36.05725 81.25624,-19.74291 164.79648,-23.81153 248.24535,-12.06578 83.4488,11.74575 162.60332,38.66301 235.3121,80.02311 14.30574,8.18006 19.3315,26.36867 11.19716,40.71728 z m 65.71733,-131.25183 c -10.19144,18.82864 -33.77153,25.86867 -52.60013,15.67719 -77.32598,-41.81727 -161.04905,-69.28308 -248.84074,-81.6231 -87.79169,-12.3372 -175.80913,-9.00286 -261.68167,9.87144 -4.66144,1.00586 -9.27717,1.18862 -13.75576,0.54862 -15.58404,-2.19449 -28.92866,-13.80003 -32.49324,-30.11722 -4.61572,-20.92864 8.63746,-41.63159 29.56838,-46.24872 94.91885,-20.88578 192.21632,-24.58578 289.19373,-10.96861 96.93171,13.62005 189.47485,43.96586 274.93509,90.21458 18.87437,10.19144 25.86581,33.7258 15.67434,52.60013 z m 72.8488,-147.93189 c -9.59716,18.46292 -29.56866,28.0144 -49.03727,25.27154 -5.2572,-0.73138 -10.42006,-2.37724 -15.40292,-4.93431 -90.02883,-46.84303 -187.00627,-77.78311 -288.23229,-91.99744 -101.22603,-14.21148 -203.00348,-11.19431 -302.44749,9.00289 -25.86636,5.25716 -51.04758,-11.46862 -56.30303,-37.29153 -5.25573,-25.86581 11.47089,-51.04588 37.29183,-56.30304 110.13804,-22.34664 222.74407,-25.68265 334.75585,-9.96289 112.01463,15.72291 219.31783,49.9973 319.03813,101.8689 23.39723,12.15431 32.49153,40.99156 20.33719,64.39161 z" fill="var(--primary)" />
+        </svg>
+      );
+    }
+
+    function YTMusicLogo({ size = 80, className = "" }) {
+      return (
+        <svg className={`service-hero-logo-svg ytmusic-logo ${className}`} width={size} height={size} viewBox="0 0 176 176" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+          <circle cx="88" cy="88" r="88" fill="#FF0000"/>
+          <path fill="#FFFFFF" d="M88,46c23.1,0,42,18.8,42,42s-18.8,42-42,42s-42-18.8-42-42S64.9,46,88,46 M88,42 c-25.4,0-46,20.6-46,46s20.6,46,46,46s46-20.6,46-46S113.4,42,88,42L88,42z"/>
+          <polygon fill="#FFFFFF" points="72,111 111,87 72,65"/>
+        </svg>
+      );
+    }
+
+    function TidalLogo({ size = 80, className = "", color = "#00ffff" }) {
+      return (
+        <svg className={`service-hero-logo-svg tidal-logo ${className}`} width={size} height={size} viewBox="0 0 1000 1000" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+          <g transform="matrix(5.2407 0 0 5.2407 500.0032 500.0021)">
+            <g transform="matrix(6.2943 0 0 -6.2943 0.0014 -29.7683)">
+              <path fill={color} d="m 0 0 l -4.729 -4.73 L -9.459 0 l 4.73 4.728 Z" transform="translate(4.7295, 0.001)"/>
+            </g>
+            <g transform="matrix(6.2943 0 0 -6.2943 0.0014 29.7656)">
+              <path fill={color} d="m 0 0 l -4.729 -4.73 L -9.459 0 l 4.73 4.73 Z" transform="translate(4.7295, 0)"/>
+            </g>
+            <g transform="matrix(6.2943 0 0 -6.2943 -59.5356 -29.769)">
+              <path fill={color} d="m 0 0 l -4.73 -4.73 L -9.459 0 l 4.729 4.729 Z" transform="translate(4.7295, 0.0005)"/>
+            </g>
+            <g transform="matrix(6.2943 0 0 -6.2943 59.5352 -29.769)">
+              <path fill={color} d="m 0 0 l -4.729 -4.73 L -9.459 0 l 4.73 4.729 Z" transform="translate(4.7295, 0.0005)"/>
+            </g>
+          </g>
+        </svg>
+      );
+    }
+
+    const ICONS = {
+      'disc': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>,
+      'music': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>,
+      'upload-cloud': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>,
+      'check-circle': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>,
+      'alert-triangle': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+      'alert-circle': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+      'skip-forward': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>,
+      'download': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+      'sun': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>,
+      'moon': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>,
+      'stop-circle': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><rect width="6" height="6" x="9" y="9"/></svg>,
+      'loader': <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
+      'external-link': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
+      'refresh-cw': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>,
+      'check': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+      'plus': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+      'layers': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.9a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>,
+      'settings': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
+      'x': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+      'play-circle': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>,
+      'user': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+      'arrow-left': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>,
+      'info': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>,
+      'key': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>,
+      'shield': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>,
+      'eye': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>,
+      'eye-off': <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+    };
+
+    function Icon({ name, size = 18, style = {} }) {
+      return (
+        <span className="icon-wrapper" style={{ width: size, height: size, minWidth: size, minHeight: size, ...style }}>
+          {ICONS[name] || null}
+        </span>
+      );
+    }
+
+    /* ── Helper: Normalized String Matching ── */
+    function normalizeStr(str) {
+      if (!str) return '';
+      return str
+        .toLowerCase()
+        .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function isConfidentMatch(searchedArtist, searchedTitle, candidate) {
+      if (!candidate) return false;
+      const sTitle = normalizeStr(searchedTitle);
+      const cTitle = normalizeStr(candidate.name);
+      if (!sTitle || !cTitle) return false;
+
+      const titleExact = (sTitle === cTitle);
+      const titleStarts = cTitle.startsWith(sTitle) || sTitle.startsWith(cTitle);
+      const titleIncludes = cTitle.includes(sTitle) || sTitle.includes(cTitle);
+      const titleWords = sTitle.split(' ').filter(w => w.length > 1);
+      let matchingWords = 0;
+      for (const w of titleWords) {
+        if (cTitle.includes(w)) matchingWords++;
+      }
+      const titleRatio = titleWords.length > 0 ? (matchingWords / titleWords.length) : 0;
+      const titleConfident = titleExact || titleStarts || (titleIncludes && titleRatio >= 0.7) || (titleRatio >= 0.75);
+
+      const sArtist = normalizeStr(searchedArtist);
+      const cArtist = normalizeStr(candidate.artists);
+      let artistConfident = false;
+      if (!sArtist) {
+        artistConfident = titleExact || (titleStarts && sTitle.length > 4);
+      } else {
+        const artistExact = (sArtist === cArtist);
+        const artistIncludes = cArtist.includes(sArtist) || sArtist.includes(cArtist);
+        const artistWords = sArtist.split(' ').filter(w => w.length > 1);
+        let matchArtistWords = 0;
+        for (const w of artistWords) {
+          if (cArtist.includes(w)) matchArtistWords++;
+        }
+        const artistRatio = artistWords.length > 0 ? (matchArtistWords / artistWords.length) : 0;
+        artistConfident = artistExact || artistIncludes || (artistRatio >= 0.5);
+      }
+
+      return titleConfident && artistConfident;
+    }
+
+    const SEARCH_DELAY_MS = 450;
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+
+    /* ── High-Performance Memoized Track Row ── */
+    const TrackRow = React.memo(function TrackRow({ track, index, onSelectTrack, targetProvider, onSearchSingle }) {
+      const pData = (track.providers && track.providers[targetProvider]) || { searched: false, candidates: [], selectedUri: null };
+
+      let statusClass = '';
+      if (pData.selectedUri && pData.selectedUri !== 'skip') statusClass = 'status-matched';
+      else if (pData.selectedUri === 'skip') statusClass = 'status-skipped';
+      else if (pData.searched) {
+        statusClass = pData.candidates.length === 0 ? 'status-unmatched' : 'status-review';
+      }
+
+      const selectedCandidate = pData.candidates.find(c => c.uri === pData.selectedUri);
+      const artSrc = selectedCandidate ? selectedCandidate.album_art : '';
+
+      return (
+        <div className={`track-row ${statusClass}`}>
+          <div className="track-thumbnail-box">
+            {artSrc ? (
+              <img src={artSrc} alt="Album Art" className="track-thumbnail-img" loading="lazy" />
+            ) : (
+              <Icon name="music" size={20} />
+            )}
+          </div>
+
+          <div className="track-meta">
+            <div className="track-title" title={track.title || 'Unknown Title'}>
+              {track.title || 'Unknown Title'}
+            </div>
+            <div className="track-artist" title={track.artist || 'Unknown Artist'}>
+              {track.artist || 'Unknown Artist'}
+            </div>
+          </div>
+
+          <div className="track-selector-box">
+            {!pData.searched ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  Not yet searched on {targetProvider === 'spotify' ? 'Spotify' : targetProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onSearchSingle(index, targetProvider)}
+                  className="glass-btn"
+                  style={{ padding: '0.3rem 0.75rem', fontSize: '0.74rem' }}
+                >
+                  Search
+                </button>
+              </div>
+            ) : pData.candidates.length === 0 ? (
+              <div style={{ color: 'var(--danger)', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Icon name="alert-circle" size={14} />
+                <span>No match found on {targetProvider === 'spotify' ? 'Spotify' : targetProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'}</span>
+              </div>
+            ) : (
+              <select
+                className="glass-select"
+                value={pData.selectedUri || ''}
+                onChange={e => onSelectTrack(index, e.target.value)}
+              >
+                <option value="">
+                  {pData.selectedUri && pData.selectedUri !== 'skip'
+                    ? '— Choose match —'
+                    : '[No exact match] — Select option or skip'}
+                </option>
+                {pData.candidates.map(c => (
+                  <option key={c.uri} value={c.uri}>
+                    {c.name} — {c.artists} {c.album ? `(${c.album})` : ''}
+                  </option>
+                ))}
+                <option value="skip">Skip this track</option>
+              </select>
+            )}
+          </div>
+        </div>
+      );
+    });
+
+    /* ── Main Application Component ── */
+    function App() {
+      const [theme, setTheme] = useState(() => localStorage.getItem('mutify_theme') || 'dark');
+      const [loggedIn, setLoggedIn] = useState(initialLoggedIn);
+      const [selectedProvider, setSelectedProvider] = useState('spotify');
+      const [providersStatus, setProvidersStatus] = useState({});
+      const [guestMode, setGuestMode] = useState({ ytmusic: false, tidal: false });
+
+      const [tracks, setTracks] = useState([]);
+      const [playlistName, setPlaylistName] = useState("Default Playlist Name");
+      const [isParsing, setIsParsing] = useState(false);
+      const [searchingProvider, setSearchingProvider] = useState(null);
+      const [searchProgress, setSearchProgress] = useState({ current: 0, total: 0 });
+      const [rateLimits, setRateLimits] = useState({ spotify: null, ytmusic: null, tidal: null });
+      const [isCreating, setIsCreating] = useState(false);
+      const [createResult, setCreateResult] = useState(null);
+
+      /* Settings Modal State */
+      const [showSettings, setShowSettings] = useState(false);
+      const [settingsTab, setSettingsTab] = useState('spotify');
+      const [showSecret, setShowSecret] = useState(false);
+      const [settingsForm, setSettingsForm] = useState({
+        spotify_client_id: '',
+        spotify_client_secret: '',
+        spotify_redirect_uri: 'http://127.0.0.1:5099/callback',
+        ytmusic_headers: ''
+      });
+      const [isSavingSettings, setIsSavingSettings] = useState(false);
+      const [settingsStatus, setSettingsStatus] = useState(null);
+
+      /* Tidal OAuth State */
+      const [tidalLoginData, setTidalLoginData] = useState(null);
+      const [tidalPolling, setTidalPolling] = useState(false);
+
+      const stopSearchRef = useRef(false);
+      const fileInputRef = useRef(null);
+
+      useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('mutify_theme', theme);
+      }, [theme]);
+
+      const fetchStatusAndSettings = () => {
+        fetch('/api/providers/status')
+          .then(res => res.json())
+          .then(data => {
+            if (data.providers) {
+              setProvidersStatus(data.providers);
+              if (data.providers.spotify && data.providers.spotify.is_authenticated) {
+                setLoggedIn(true);
+              }
+            }
+          })
+          .catch(() => {});
+
+        fetch('/api/settings')
+          .then(res => res.json())
+          .then(data => {
+            setSettingsForm(prev => ({
+              ...prev,
+              spotify_client_id: data.spotify_client_id || '',
+              spotify_client_secret: data.spotify_client_secret || '',
+              spotify_redirect_uri: data.spotify_redirect_uri || 'http://127.0.0.1:5099/callback',
+              ytmusic_headers: data.ytmusic_headers || ''
+            }));
+          })
+          .catch(() => {});
+      };
+
+      useEffect(() => {
+        fetchStatusAndSettings();
+      }, []);
+
+      const toggleTheme = useCallback(() => {
+        setTheme(t => t === 'dark' ? 'light' : 'dark');
+      }, []);
+
+      const handleSaveSettings = async (e) => {
+        if (e) e.preventDefault();
+        setIsSavingSettings(true);
+        setSettingsStatus(null);
+
+        try {
+          const resp = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settingsForm)
+          });
+          const data = await resp.json();
+          setIsSavingSettings(false);
+
+          if (data.success) {
+            setSettingsStatus({ type: 'success', message: 'Settings saved & applied successfully!' });
+            fetchStatusAndSettings();
+            setTimeout(() => {
+              setShowSettings(false);
+              setSettingsStatus(null);
+            }, 1200);
+          } else {
+            setSettingsStatus({ type: 'error', message: data.error || 'Failed to save settings.' });
+          }
+        } catch (err) {
+          setIsSavingSettings(false);
+          setSettingsStatus({ type: 'error', message: 'Failed to connect to server.' });
+        }
+      };
+
+      const startTidalLogin = async () => {
+        setTidalLoginData(null);
+        try {
+          const resp = await fetch('/api/tidal/login', { method: 'POST' });
+          const data = await resp.json();
+          if (data.login_url) {
+            setTidalLoginData(data);
+            window.open(data.login_url, '_blank');
+          } else {
+            alert(data.error || 'Failed to start Tidal login.');
+          }
+        } catch (e) {
+          alert('Tidal login error.');
+        }
+      };
+
+      const checkTidalLogin = async () => {
+        if (!tidalLoginData || !tidalLoginData.session_id) return;
+        setTidalPolling(true);
+        try {
+          const resp = await fetch('/api/tidal/check_login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: tidalLoginData.session_id })
+          });
+          const data = await resp.json();
+          setTidalPolling(false);
+          if (data.success) {
+            alert('Tidal connected successfully!');
+            setTidalLoginData(null);
+            fetchStatusAndSettings();
+          } else {
+            alert(data.message || 'Waiting for Tidal authorization...');
+          }
+        } catch (e) {
+          setTidalPolling(false);
+          alert('Tidal check failed.');
+        }
+      };
+
+      const handleFile = async (file) => {
+        if (!file) return;
+        setIsParsing(true);
+        setCreateResult(null);
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const resp = await fetch('/parse', { method: 'POST', body: formData });
+          const data = await resp.json();
+          setIsParsing(false);
+
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
+
+          const initialTracks = data.tracks.map(t => ({
+            ...t,
+            providers: {
+              spotify: { searched: false, candidates: [], selectedUri: null },
+              ytmusic: { searched: false, candidates: [], selectedUri: null },
+              tidal: { searched: false, candidates: [], selectedUri: null }
+            }
+          }));
+
+          setTracks(initialTracks);
+          startSearching(initialTracks, selectedProvider);
+        } catch (err) {
+          setIsParsing(false);
+          alert('Failed to parse playlist file.');
+        }
+      };
+
+      const searchSingleTrack = async (index, provider) => {
+        const track = tracks[index];
+        if (!track) return;
+
+        try {
+          const resp = await fetch('/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, artist: track.artist, title: track.title, album: track.album })
+          });
+
+          if (resp.status === 401) {
+            alert(`${provider.toUpperCase()} session expired or not authenticated. Please check Settings.`);
+            return;
+          }
+
+          const data = await resp.json();
+          const candidates = data.results || [];
+
+          setTracks(prev => {
+            const next = [...prev];
+            const cur = next[index];
+            if (!cur) return prev;
+            const curProv = (cur.providers && cur.providers[provider]) || {};
+            let chosen = curProv.selectedUri;
+            if (!chosen && candidates.length > 0 && isConfidentMatch(cur.artist, cur.title, candidates[0])) {
+              chosen = candidates[0].uri;
+            }
+            next[index] = {
+              ...cur,
+              providers: {
+                ...cur.providers,
+                [provider]: {
+                  searched: true,
+                  candidates: candidates,
+                  selectedUri: chosen
+                }
+              }
+            };
+            return next;
+          });
+        } catch (e) {}
+      };
+
+      const startSearching = async (trackList, provider) => {
+        setSearchingProvider(provider);
+        stopSearchRef.current = false;
+        setSearchProgress({ current: 0, total: trackList.length });
+
+        for (let i = 0; i < trackList.length; i++) {
+          if (stopSearchRef.current) {
+            setSearchingProvider(null);
+            return;
+          }
+
+          const t = trackList[i];
+          setSearchProgress({ current: i + 1, total: trackList.length });
+
+          try {
+            const resp = await fetch('/search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ provider, artist: t.artist, title: t.title, album: t.album })
+            });
+
+            if (resp.status === 401) {
+              alert(`${provider.toUpperCase()} is not authenticated. Please check Settings.`);
+              setSearchingProvider(null);
+              return;
+            }
+
+            if (resp.status === 429) {
+              const data = await resp.json().catch(() => ({}));
+              const wait = data.retry_after || 30;
+              setRateLimits(prev => ({ ...prev, [provider]: wait }));
+              await delay(wait * 1000);
+              setRateLimits(prev => ({ ...prev, [provider]: null }));
+              i--;
+              continue;
+            }
+
+            const data = await resp.json();
+            const candidates = data.results || [];
+
+            // Functional update prevents overriding manual user selections made during search
+            setTracks(prev => {
+              const next = [...prev];
+              const cur = next[i];
+              if (!cur) return prev;
+              const curProv = (cur.providers && cur.providers[provider]) || {};
+              let chosen = curProv.selectedUri;
+              if (!chosen && candidates.length > 0 && isConfidentMatch(cur.artist, cur.title, candidates[0])) {
+                chosen = candidates[0].uri;
+              }
+              next[i] = {
+                ...cur,
+                providers: {
+                  ...cur.providers,
+                  [provider]: {
+                    searched: true,
+                    candidates: candidates,
+                    selectedUri: chosen
+                  }
+                }
+              };
+              return next;
+            });
+          } catch (e) {
+            setTracks(prev => {
+              const next = [...prev];
+              const cur = next[i];
+              if (!cur) return prev;
+              next[i] = {
+                ...cur,
+                providers: {
+                  ...cur.providers,
+                  [provider]: {
+                    searched: true,
+                    candidates: [],
+                    selectedUri: null
+                  }
+                }
+              };
+              return next;
+            });
+          }
+
+          if (i < trackList.length - 1) {
+            await delay(SEARCH_DELAY_MS);
+          }
+        }
+
+        setSearchingProvider(null);
+      };
+
+      const handleSelectTrack = useCallback((index, uri) => {
+        setTracks(prev => {
+          const next = [...prev];
+          const cur = next[index];
+          if (!cur) return prev;
+          next[index] = {
+            ...cur,
+            providers: {
+              ...cur.providers,
+              [selectedProvider]: {
+                ...(cur.providers?.[selectedProvider] || { candidates: [], searched: true }),
+                selectedUri: uri || null
+              }
+            }
+          };
+          return next;
+        });
+      }, [selectedProvider]);
+
+      const handleCreatePlaylist = async () => {
+        const uris = tracks
+          .map(t => t.providers?.[selectedProvider]?.selectedUri)
+          .filter(u => u && u !== 'skip');
+
+        if (uris.length === 0) {
+          alert(`No valid matches selected for ${selectedProvider.toUpperCase()} to add to playlist.`);
+          return;
+        }
+
+        setIsCreating(true);
+        setCreateResult(null);
+
+        try {
+          const resp = await fetch('/create_playlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: selectedProvider, name: playlistName, uris })
+          });
+
+          const data = await resp.json();
+          setIsCreating(false);
+
+          if (data.error) {
+            setCreateResult({ success: false, message: data.error });
+          } else {
+            setCreateResult({
+              success: true,
+              name: data.playlist_name,
+              count: data.track_count,
+              url: data.playlist_url,
+              provider: selectedProvider
+            });
+          }
+        } catch (err) {
+          setIsCreating(false);
+          setCreateResult({ success: false, message: 'Failed to create playlist.' });
+        }
+      };
+
+      const handleExportUnmatched = () => {
+        const unmatched = tracks.filter(t => {
+          const p = t.providers?.[selectedProvider];
+          return p && p.searched && (!p.selectedUri || p.selectedUri === 'skip');
+        });
+
+        if (unmatched.length === 0) {
+          alert(`All tracks have a valid match selected on ${selectedProvider.toUpperCase()}!`);
+          return;
+        }
+
+        const text = unmatched.map(t => {
+          const p = t.providers?.[selectedProvider];
+          let tag = '[Not Found]';
+          if (p && p.selectedUri === 'skip') tag = '[Skipped]';
+          else if (p && p.candidates && p.candidates.length > 0) tag = '[Unverified / Review]';
+          return `${t.artist || 'Unknown Artist'} - ${t.title || 'Unknown Title'} ${tag}`;
+        }).join('\n');
+
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `mutify_${selectedProvider}_missing.txt`;
+        a.click();
+      };
+
+      const counts = useMemo(() => {
+        const total = tracks.length;
+        const currentProviderTracks = tracks.map(t => t.providers?.[selectedProvider] || { searched: false, candidates: [], selectedUri: null });
+        const searchedCount = currentProviderTracks.filter(p => p.searched).length;
+        const unsearchedCount = total - searchedCount;
+        const matched = currentProviderTracks.filter(p => p.selectedUri && p.selectedUri !== 'skip').length;
+        const review = currentProviderTracks.filter(p => p.searched && !p.selectedUri && p.candidates && p.candidates.length > 0).length;
+        const skippedOrNotFound = currentProviderTracks.filter(p => p.searched && (!p.selectedUri || p.selectedUri === 'skip')).length;
+        return { total, searchedCount, unsearchedCount, matched, review, skippedOrNotFound };
+      }, [tracks, selectedProvider]);
+
+      /* Check if current selected provider is authenticated */
+      const isRealConnected = useMemo(() => {
+        if (selectedProvider === 'spotify') return loggedIn;
+        if (selectedProvider === 'ytmusic') return Boolean(providersStatus.ytmusic && providersStatus.ytmusic.is_authenticated);
+        if (selectedProvider === 'tidal') return Boolean(providersStatus.tidal && providersStatus.tidal.is_authenticated);
+        return false;
+      }, [selectedProvider, loggedIn, providersStatus]);
+
+      const isInGuestMode = Boolean(guestMode[selectedProvider] && !isRealConnected);
+      const isCurrentProviderConnected = isRealConnected || isInGuestMode;
+
+      return (
+        <div className="app-root">
+          {/* Header */}
+          <header className="header">
+            <div className="brand-group">
+              <div className="brand-logo-disc" title="Mutify">
+                <MutifyLogo size={26} color="#000000" />
+              </div>
+              <div>
+                <h1 className="brand-title">Mutify</h1>
+                <p className="brand-tagline">Multi-Service Playlist Converter</p>
+              </div>
+            </div>
+
+            <div className="header-actions">
+              {loggedIn && selectedProvider === 'spotify' && (
+                <a href="/login" className="glass-btn" title="Refresh Spotify Authorization">
+                  <Icon name="refresh-cw" size={14} />
+                  <span>Reconnect</span>
+                </a>
+              )}
+              <button onClick={() => setShowSettings(true)} className="glass-btn icon-btn" title="Streaming Settings & Credentials">
+                <Icon name="settings" size={17} />
+              </button>
+              <button onClick={toggleTheme} className="glass-btn icon-btn" title="Toggle Theme">
+                <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={17} />
+              </button>
+            </div>
+          </header>
+
+          {/* Destination Service Selector */}
+          <div className="liquid-glass destination-selector-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Icon name="layers" size={16} style={{ color: 'var(--text-muted)' }} />
+              <span style={{ fontSize: '0.84rem', fontWeight: 700 }}>Export Target:</span>
+            </div>
+            <div className="dest-pills-group">
+              <button
+                className={`dest-pill ${selectedProvider === 'spotify' ? 'active spotify' : ''}`}
+                onClick={() => setSelectedProvider('spotify')}
+              >
+                <SpotifyLogo size={16} />
+                <span>Spotify</span>
+                {loggedIn && <Icon name="check" size={12} />}
+              </button>
+
+              <button
+                className={`dest-pill ${selectedProvider === 'ytmusic' ? 'active ytmusic' : ''}`}
+                onClick={() => setSelectedProvider('ytmusic')}
+              >
+                <YTMusicLogo size={16} />
+                <span>YouTube Music</span>
+                {providersStatus.ytmusic && providersStatus.ytmusic.is_authenticated ? (
+                  <Icon name="check" size={12} />
+                ) : guestMode.ytmusic ? (
+                  <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(Guest)</span>
+                ) : null}
+              </button>
+
+              <button
+                className={`dest-pill ${selectedProvider === 'tidal' ? 'active tidal' : ''}`}
+                onClick={() => setSelectedProvider('tidal')}
+              >
+                <TidalLogo size={16} color={selectedProvider === 'tidal' ? '#00ffff' : 'currentColor'} />
+                <span>Tidal</span>
+                {providersStatus.tidal && providersStatus.tidal.is_authenticated ? (
+                  <Icon name="check" size={12} />
+                ) : guestMode.tidal ? (
+                  <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>(Guest)</span>
+                ) : null}
+              </button>
+            </div>
+          </div>
+
+          {/* Dedicated Landing Hero Cards Per Service (when not yet connected) */}
+          {!isCurrentProviderConnected ? (
+            <>
+              {selectedProvider === 'spotify' && (
+                <div className="liquid-glass hero-landing-card">
+                  <div className="service-hero-logo-box" title="Spotify">
+                    <SpotifyLogo size={84} />
+                  </div>
+                  <h2 style={{ fontSize: '1.45rem', fontWeight: 800, marginBottom: '0.5rem' }}>Connect Spotify to Begin</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 600, maxWidth: 460, margin: '0 auto 1.5rem', lineHeight: 1.5 }}>
+                    Authorize Mutify with your Spotify account to match metadata and generate new playlists directly in your library.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <a href="/login" className="glass-btn glass-btn-primary" style={{ padding: '0.8rem 2.2rem', fontSize: '0.95rem' }}>
+                      <Icon name="plus" size={18} />
+                      <span>Connect Spotify</span>
+                    </a>
+                    <button onClick={() => { setSettingsTab('spotify'); setShowSettings(true); }} className="glass-btn" style={{ padding: '0.8rem 1.4rem', fontSize: '0.95rem' }}>
+                      <Icon name="settings" size={16} />
+                      <span>Configure API</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {selectedProvider === 'ytmusic' && (
+                <div className="liquid-glass hero-landing-card">
+                  <div className="service-hero-logo-box" title="YouTube Music">
+                    <YTMusicLogo size={84} />
+                  </div>
+                  <h2 style={{ fontSize: '1.45rem', fontWeight: 800, marginBottom: '0.5rem' }}>Connect YouTube Music</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 600, maxWidth: 480, margin: '0 auto 1.5rem', lineHeight: 1.5 }}>
+                    Search the immense YouTube Music catalog with smart audio ranking, and configure your session headers to generate playlists directly in your account.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => { setSettingsTab('ytmusic'); setShowSettings(true); }} className="glass-btn glass-btn-ytmusic" style={{ padding: '0.8rem 2.2rem', fontSize: '0.95rem' }}>
+                      <Icon name="plus" size={18} />
+                      <span>Connect Headers</span>
+                    </button>
+                    <button onClick={() => setGuestMode(prev => ({ ...prev, ytmusic: true }))} className="glass-btn" style={{ padding: '0.8rem 1.4rem', fontSize: '0.95rem' }}>
+                      <Icon name="play-circle" size={16} />
+                      <span>Guest Search Mode</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {selectedProvider === 'tidal' && (
+                <div className="liquid-glass hero-landing-card">
+                  <div className="service-hero-logo-box" title="Tidal">
+                    <TidalLogo size={84} color="#00ffff" />
+                  </div>
+                  <h2 style={{ fontSize: '1.45rem', fontWeight: 800, marginBottom: '0.5rem' }}>Connect Tidal to Begin</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 600, maxWidth: 480, margin: '0 auto 1.5rem', lineHeight: 1.5 }}>
+                    Link your Tidal account to match high-fidelity tracks and generate lossless master playlists directly in your collection.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => { setSettingsTab('tidal'); setShowSettings(true); }} className="glass-btn glass-btn-tidal" style={{ padding: '0.8rem 2.2rem', fontSize: '0.95rem' }}>
+                      <Icon name="plus" size={18} />
+                      <span>Link Tidal Account</span>
+                    </button>
+                    <button onClick={() => setGuestMode(prev => ({ ...prev, tidal: true }))} className="glass-btn" style={{ padding: '0.8rem 1.4rem', fontSize: '0.95rem' }}>
+                      <Icon name="play-circle" size={16} />
+                      <span>Guest Search Mode</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Guest Search Mode Status Banner with Exit/Back Button */}
+              {isInGuestMode && (
+                <div className="liquid-glass" style={{
+                  padding: '0.75rem 1.15rem',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  borderRadius: '16px',
+                  background: 'var(--row-hover-bg)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--input-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                      <Icon name="user" size={15} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 800 }}>
+                        Guest Search Mode ({selectedProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'})
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        Search & export missing songs without an account. Connect account to create playlists directly.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button
+                      onClick={() => { setSettingsTab(selectedProvider); setShowSettings(true); }}
+                      className="glass-btn"
+                      style={{ padding: '0.45rem 0.9rem', fontSize: '0.78rem' }}
+                    >
+                      <Icon name="plus" size={13} />
+                      <span>Connect</span>
+                    </button>
+                    <button
+                      onClick={() => setGuestMode(prev => ({ ...prev, [selectedProvider]: false }))}
+                      className="glass-btn"
+                      style={{ padding: '0.45rem 0.9rem', fontSize: '0.78rem' }}
+                      title="Exit Guest Mode and Return to Setup"
+                    >
+                      <Icon name="arrow-left" size={13} />
+                      <span>Back</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Dropzone */}
+              <div
+                className="liquid-glass dropzone-card"
+                onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); }}
+                onDragLeave={e => { e.currentTarget.classList.remove('dragover'); }}
+                onDrop={e => {
+                  e.preventDefault();
+                  e.currentTarget.classList.remove('dragover');
+                  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+                }}
+                onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              >
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".m3u8,.m3u"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    if (e.target.files.length) handleFile(e.target.files[0]);
+                  }}
+                />
+                <div className="dropzone-icon-ring">
+                  <Icon name={isParsing ? 'loader' : 'upload-cloud'} size={26} />
+                </div>
+                <h3 className="dropzone-title">
+                  {isParsing ? 'Reading playlist metadata…' : `Drop your .m3u8 playlist to match on ${selectedProvider.toUpperCase()}`}
+                </h3>
+                <p className="dropzone-sub">
+                  Automatically matches track titles & artists with intelligent fallback ranking
+                </p>
+              </div>
+
+              {/* Rate Limit Banner for Selected Provider */}
+              {rateLimits[selectedProvider] && (
+                <div className="liquid-glass" style={{ padding: '1rem', marginBottom: '1.25rem', borderColor: 'var(--warning-border)', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                  <Icon name="alert-triangle" size={20} style={{ color: 'var(--warning)' }} />
+                  <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>
+                    {selectedProvider.toUpperCase()} API rate limit reached. Pausing search for {rateLimits[selectedProvider]}s…
+                  </span>
+                </div>
+              )}
+
+              {/* Progress Card when Searching */}
+              {searchingProvider && (
+                <div className="liquid-glass progress-bar-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <Icon name="loader" size={18} style={{ color: 'var(--primary)' }} />
+                    <span style={{ fontSize: '0.88rem', fontWeight: 700 }}>
+                      Searching {searchingProvider.toUpperCase()} ({searchProgress.current} of {searchProgress.total})…
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => { stopSearchRef.current = true; setSearchingProvider(null); }}
+                    className="glass-btn glass-btn-danger"
+                    style={{ padding: '0.4rem 0.85rem', fontSize: '0.78rem' }}
+                  >
+                    <Icon name="stop-circle" size={14} />
+                    <span>Stop Search</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Unsearched Tracks Prompt when Switching Providers */}
+              {tracks.length > 0 && counts.unsearchedCount > 0 && !searchingProvider && (
+                <div className="liquid-glass" style={{
+                  padding: '0.9rem 1.25rem',
+                  marginBottom: '1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  borderRadius: '16px',
+                  background: 'var(--row-hover-bg)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <Icon name="layers" size={16} style={{ color: 'var(--primary)' }} />
+                    <span style={{ fontSize: '0.84rem', fontWeight: 700 }}>
+                      {counts.unsearchedCount} of {tracks.length} tracks not yet searched on {selectedProvider === 'spotify' ? 'Spotify' : selectedProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'}.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => startSearching(tracks, selectedProvider)}
+                    className="glass-btn glass-btn-primary"
+                    style={{ padding: '0.45rem 1rem', fontSize: '0.8rem' }}
+                  >
+                    <Icon name="play-circle" size={14} />
+                    <span>Search on {selectedProvider.toUpperCase()}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Track Review Section */}
+              {tracks.length > 0 && (
+                <div>
+                  {/* Stats Counter Bar */}
+                  <div className="stats-bar">
+                    <div className="liquid-glass stat-tile">
+                      <div className="stat-icon-badge" style={{ background: 'var(--input-bg)', color: 'var(--text)' }}>
+                        <Icon name="layers" size={18} />
+                      </div>
+                      <div>
+                        <div className="stat-number">{counts.total}</div>
+                        <div className="stat-label">Total Tracks</div>
+                      </div>
+                    </div>
+
+                    <div className="liquid-glass stat-tile">
+                      <div className="stat-icon-badge" style={{ background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)' }}>
+                        <Icon name="check-circle" size={18} />
+                      </div>
+                      <div>
+                        <div className="stat-number" style={{ color: 'var(--success)' }}>{counts.matched}</div>
+                        <div className="stat-label">Matched</div>
+                      </div>
+                    </div>
+
+                    <div className="liquid-glass stat-tile">
+                      <div className="stat-icon-badge" style={{ background: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning-border)' }}>
+                        <Icon name="alert-triangle" size={18} />
+                      </div>
+                      <div>
+                        <div className="stat-number" style={{ color: 'var(--warning)' }}>{counts.review}</div>
+                        <div className="stat-label">Review</div>
+                      </div>
+                    </div>
+
+                    <div className="liquid-glass stat-tile">
+                      <div className="stat-icon-badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}>
+                        <Icon name="alert-circle" size={18} />
+                      </div>
+                      <div>
+                        <div className="stat-number" style={{ color: 'var(--danger)' }}>{counts.skippedOrNotFound}</div>
+                        <div className="stat-label">Skipped / Missing</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Playlist Name Input */}
+                  <div className="liquid-glass input-card">
+                    <Icon name="disc" size={20} style={{ color: 'var(--primary)' }} />
+                    <input
+                      type="text"
+                      className="glass-input"
+                      value={playlistName}
+                      onChange={e => setPlaylistName(e.target.value)}
+                      placeholder="Playlist Name"
+                    />
+                  </div>
+
+                  {/* Result Banner */}
+                  {createResult && (
+                    <div
+                      className="liquid-glass"
+                      style={{
+                        padding: '1.25rem',
+                        marginBottom: '1.5rem',
+                        borderColor: createResult.success ? 'var(--success-border)' : 'var(--danger-border)',
+                        background: createResult.success ? 'var(--success-bg)' : 'var(--danger-bg)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                        <Icon name={createResult.success ? 'check-circle' : 'alert-circle'} size={24} style={{ color: createResult.success ? 'var(--success)' : 'var(--danger)' }} />
+                        <div>
+                          {createResult.success ? (
+                            <>
+                              <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>Created "{createResult.name}" with {createResult.count} tracks!</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Ready to stream in your {selectedProvider.toUpperCase()} library.</div>
+                            </>
+                          ) : (
+                            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Error: {createResult.message}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {createResult.success && createResult.url && (
+                        <a href={createResult.url} target="_blank" rel="noreferrer" className="glass-btn glass-btn-primary" style={{ padding: '0.55rem 1.1rem', fontSize: '0.82rem' }}>
+                          <span>Open Playlist</span>
+                          <Icon name="external-link" size={14} />
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tracks List */}
+                  <div style={{ marginBottom: '2rem' }}>
+                    {tracks.map((t, index) => (
+                      <TrackRow
+                        key={t.path || `${t.artist}-${t.title}-${index}`}
+                        track={t}
+                        index={index}
+                        onSelectTrack={handleSelectTrack}
+                        targetProvider={selectedProvider}
+                        onSearchSingle={searchSingleTrack}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Floating Action Dock */}
+          {tracks.length > 0 && (
+            <div className="floating-dock-container">
+              <div className="floating-dock">
+                <div className="dock-pill-stats">
+                  <Icon name="check-circle" size={16} style={{ color: 'var(--primary)' }} />
+                  <span><b>{counts.matched}</b> / {counts.total} ready</span>
+                </div>
+
+                <button
+                  onClick={handleExportUnmatched}
+                  className="glass-btn"
+                  style={{ padding: '0.55rem 1rem', fontSize: '0.82rem' }}
+                  title="Export missing or skipped songs as text list"
+                >
+                  <Icon name="download" size={14} />
+                  <span>Export Missing</span>
+                </button>
+
+                <button
+                  onClick={handleCreatePlaylist}
+                  disabled={isCreating || counts.matched === 0}
+                  className={`glass-btn ${selectedProvider === 'ytmusic' ? 'glass-btn-ytmusic' : selectedProvider === 'tidal' ? 'glass-btn-tidal' : 'glass-btn-primary'}`}
+                  style={{ padding: '0.55rem 1.25rem', fontSize: '0.82rem' }}
+                >
+                  <Icon name={isCreating ? 'loader' : 'plus'} size={15} />
+                  <span>{isCreating ? 'Creating Playlist…' : `Create ${selectedProvider === 'spotify' ? 'Spotify' : selectedProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'} Playlist`}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Tabbed Settings Modal Dialog */}
+          {showSettings && (
+            <div className="modal-overlay" onClick={() => setShowSettings(false)}>
+              <div className="liquid-glass settings-modal-card" onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--primary)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Icon name="settings" size={18} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Streaming Providers</h3>
+                      <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600 }}>Configure service credentials & tokens</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowSettings(false)} className="glass-btn icon-btn" style={{ width: 32, height: 32, minWidth: 32, minHeight: 32 }}>
+                    <Icon name="x" size={16} />
+                  </button>
+                </div>
+
+                {/* Tabs with official vector logos */}
+                <div className="modal-tab-bar">
+                  <button
+                    className={`modal-tab-btn ${settingsTab === 'spotify' ? 'active' : ''}`}
+                    onClick={() => setSettingsTab('spotify')}
+                  >
+                    <SpotifyLogo size={16} />
+                    <span>Spotify</span>
+                  </button>
+                  <button
+                    className={`modal-tab-btn ${settingsTab === 'ytmusic' ? 'active' : ''}`}
+                    onClick={() => setSettingsTab('ytmusic')}
+                  >
+                    <YTMusicLogo size={16} />
+                    <span>YouTube Music</span>
+                  </button>
+                  <button
+                    className={`modal-tab-btn ${settingsTab === 'tidal' ? 'active' : ''}`}
+                    onClick={() => setSettingsTab('tidal')}
+                  >
+                    <TidalLogo size={16} color="currentColor" />
+                    <span>Tidal</span>
+                  </button>
+                </div>
+
+                {settingsTab === 'spotify' && (
+                  <form onSubmit={handleSaveSettings}>
+                    <div className="settings-field-group">
+                      <label className="settings-label">Spotify Client ID</label>
+                      <div className="settings-input-wrapper">
+                        <Icon name="key" size={16} style={{ color: 'var(--text-muted)' }} />
+                        <input
+                          type="text"
+                          className="settings-input"
+                          placeholder="e.g. 9ec2dedcddfd4fc792bb4e6f49975286"
+                          value={settingsForm.spotify_client_id}
+                          onChange={e => setSettingsForm({ ...settingsForm, spotify_client_id: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="settings-field-group">
+                      <label className="settings-label">Spotify Client Secret</label>
+                      <div className="settings-input-wrapper">
+                        <Icon name="shield" size={16} style={{ color: 'var(--text-muted)' }} />
+                        <input
+                          type={showSecret ? "text" : "password"}
+                          className="settings-input"
+                          placeholder="e.g. 7d91763a12f149aba93cdee6fc279816"
+                          value={settingsForm.spotify_client_secret}
+                          onChange={e => setSettingsForm({ ...settingsForm, spotify_client_secret: e.target.value })}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret(!showSecret)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px', display: 'flex', alignItems: 'center' }}
+                          title={showSecret ? "Hide Secret" : "Show Secret"}
+                        >
+                          <Icon name={showSecret ? "eye-off" : "eye"} size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="settings-field-group">
+                      <label className="settings-label">Redirect URI</label>
+                      <div className="settings-input-wrapper">
+                        <Icon name="external-link" size={16} style={{ color: 'var(--text-muted)' }} />
+                        <input
+                          type="text"
+                          className="settings-input"
+                          placeholder="http://127.0.0.1:5099/callback"
+                          value={settingsForm.spotify_redirect_uri}
+                          onChange={e => setSettingsForm({ ...settingsForm, spotify_redirect_uri: e.target.value })}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '0.75rem 0.9rem', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid var(--input-border)', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.25rem', fontWeight: 800, color: 'var(--text)' }}>
+                        <Icon name="info" size={14} style={{ color: 'var(--primary)' }} />
+                        <span>Setup Notice</span>
+                      </div>
+                      <div>Get credentials from <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', fontWeight: 700 }}>Spotify Developer Dashboard</a>. Make sure your account email is listed in <b>User Management</b>.</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                      <button type="submit" disabled={isSavingSettings} className="glass-btn glass-btn-primary">
+                        <Icon name={isSavingSettings ? 'loader' : 'check'} size={15} />
+                        <span>Save Spotify Settings</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {settingsTab === 'ytmusic' && (
+                  <form onSubmit={handleSaveSettings}>
+                    <div className="settings-field-group">
+                      <label className="settings-label">YouTube Music Browser Headers / JSON</label>
+                      <div className="settings-input-wrapper" style={{ padding: '0.65rem' }}>
+                        <textarea
+                          className="settings-textarea"
+                          placeholder='Paste your request headers from music.youtube.com or leave empty to use search-only mode.'
+                          value={settingsForm.ytmusic_headers}
+                          onChange={e => setSettingsForm({ ...settingsForm, ytmusic_headers: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '0.75rem 0.9rem', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid var(--input-border)', fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '1.25rem', lineHeight: 1.5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.25rem', fontWeight: 800, color: 'var(--text)' }}>
+                        <Icon name="info" size={14} style={{ color: 'var(--primary)' }} />
+                        <span>Setup Notice</span>
+                      </div>
+                      <div>Searching YouTube Music works out of the box with zero setup. To create playlists in your YouTube account, paste your cookie headers from browser DevTools (Network tab on <code>music.youtube.com</code>).</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                      <button type="submit" disabled={isSavingSettings} className="glass-btn glass-btn-ytmusic">
+                        <Icon name={isSavingSettings ? 'loader' : 'check'} size={15} />
+                        <span>Save YT Music Headers</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {settingsTab === 'tidal' && (
+                  <div>
+                    <div style={{ padding: '1rem', borderRadius: 14, background: 'var(--input-bg)', border: '1px solid var(--card-border)', marginBottom: '1.25rem' }}>
+                      <h4 style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '0.35rem' }}>Tidal Device Authorization</h4>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1rem' }}>
+                        Click below to generate a Tidal device login link. Once you approve it in Tidal, click "Verify Connection".
+                      </p>
+
+                      {tidalLoginData ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          <a
+                            href={tidalLoginData.login_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="glass-btn glass-btn-tidal"
+                            style={{ textAlign: 'center', justifyContent: 'center' }}
+                          >
+                            <span>1. Open Tidal Authorization Link</span>
+                            <Icon name="external-link" size={14} />
+                          </a>
+                          <button
+                            onClick={checkTidalLogin}
+                            disabled={tidalPolling}
+                            className="glass-btn"
+                            style={{ justifyContent: 'center' }}
+                          >
+                            <Icon name={tidalPolling ? 'loader' : 'check'} size={15} />
+                            <span>{tidalPolling ? 'Checking Tidal…' : '2. Verify Connection'}</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={startTidalLogin} className="glass-btn glass-btn-tidal">
+                          <Icon name="music" size={15} />
+                          <span>Link Tidal Account</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {settingsStatus && (
+                  <div style={{
+                    marginTop: '1.25rem',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 12,
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    background: settingsStatus.type === 'success' ? 'var(--success-bg)' : 'var(--danger-bg)',
+                    color: settingsStatus.type === 'success' ? 'var(--success)' : 'var(--danger)',
+                    border: `1px solid ${settingsStatus.type === 'success' ? 'var(--success-border)' : 'var(--danger-border)'}`
+                  }}>
+                    {settingsStatus.message}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
+  {% endraw %}
+  </script>
+</body>
+
+</html>

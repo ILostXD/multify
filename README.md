@@ -128,9 +128,12 @@ Navigate to **`http://127.0.0.1:5099`**.
 
 ### Spotify
 1. Create an application on the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Set the **Redirect URI** to `http://127.0.0.1:5099/callback`.
-3. Add your Spotify email under **User Management**.
-4. Enter your **Client ID** and **Client Secret** in Mutify Settings and click **Connect Spotify**.
+2. Set the **Redirect URI** to match your deployment:
+   - **Local instance**: `http://127.0.0.1:5099/callback`
+   - **Remote server / LAN**: `http://<YOUR_SERVER_IP>:5099/callback` (e.g. `http://192.168.1.100:5099/callback`)
+   - **Domain / Reverse Proxy**: `https://<YOUR_DOMAIN>/callback`
+3. Add your Spotify email under **User Management** in the developer dashboard.
+4. In Mutify Settings, enter your **Client ID**, **Client Secret**, and ensure the **Redirect URI** matches the one configured in Spotify.
 
 ### YouTube Music
 - **Guest Search**: Works out of the box with zero setup.

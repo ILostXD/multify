@@ -1,7 +1,7 @@
 services:
-  mutify:
+  multify:
     build: .
-    container_name: mutify
+    container_name: multify
     restart: unless-stopped
     ports:
       - "5099:5099"

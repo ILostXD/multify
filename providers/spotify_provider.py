@@ -168,7 +168,7 @@ class SpotifyProvider(BaseProvider):
         create_resp = requests.post(
             f"{SPOTIFY_API_BASE}/me/playlists",
             headers={**headers, "Content-Type": "application/json"},
-            json={"name": name, "public": False, "description": "Imported via Mutify"},
+            json={"name": name, "public": False, "description": "Imported via Multify"},
             timeout=10
         )
 
@@ -180,7 +180,7 @@ class SpotifyProvider(BaseProvider):
                 create_resp = requests.post(
                     f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
                     headers={**headers, "Content-Type": "application/json"},
-                    json={"name": name, "public": False, "description": "Imported via Mutify"},
+                    json={"name": name, "public": False, "description": "Imported via Multify"},
                     timeout=10
                 )
 

@@ -1,7 +1,7 @@
-# Mutify
+# Multify
 
 <p align="center">
-  <img src="assets/Mutify_BG_Color_Logo.svg" width="130" height="130" alt="Mutify Logo" />
+  <img src="assets/Multify_BG_Color_Logo.svg" width="130" height="130" alt="Multify Logo" />
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 
 ## Overview
 
-**Mutify** is a high-performance, privacy-first playlist converter designed to import local music library playlists (`.m3u8` / `.m3u`) into your favorite cloud streaming services. With intelligent track metadata matching, studio album prioritization, guest search modes, and a stunning liquid glass interface, Mutify makes migrating and synchronizing playlists effortless.
+**Multify** is a high-performance, privacy-first playlist converter designed to import local music library playlists (`.m3u8` / `.m3u`) into your favorite cloud streaming services. With intelligent track metadata matching, studio album prioritization, guest search modes, and a stunning liquid glass interface, Multify makes migrating and synchronizing playlists effortless.
 
 ---
 
@@ -31,7 +31,7 @@
 Select your target streaming service with dedicated glowing hero cards and direct dropzone import.
 
 <p align="center">
-  <img src="assets/LandingPage.png" alt="Mutify Landing Page" width="800" />
+  <img src="assets/LandingPage.png" alt="Multify Landing Page" width="800" />
 </p>
 
 ---
@@ -68,7 +68,7 @@ Tabbed credential management for Spotify OAuth, YouTube Music session headers, a
 
 ## Supported Input Playlists
 
-Mutify parses standard and extended `.m3u` / `.m3u8` playlist files exported from:
+Multify parses standard and extended `.m3u` / `.m3u8` playlist files exported from:
 - **Navidrome / Subsonic**
 - **iTunes / Apple Music**
 - **Plex / Jellyfin**
@@ -81,13 +81,13 @@ Mutify parses standard and extended `.m3u` / `.m3u8` playlist files exported fro
 
 ### Option A: Docker (Recommended)
 
-Run Mutify instantly with Docker or Docker Compose without installing Python or dependencies:
+Run Multify instantly with Docker or Docker Compose without installing Python or dependencies:
 
 #### Using Docker Compose
 ```bash
 # Clone the repository
-git clone https://github.com/ILostXD/mutify.git
-cd mutify
+git clone https://github.com/ILostXD/multify.git
+cd multify
 
 # Start container in background
 docker compose up -d
@@ -96,8 +96,8 @@ docker compose up -d
 #### Using Docker CLI
 ```bash
 # Build and run container
-docker build -t mutify .
-docker run -d -p 5099:5099 --name mutify mutify
+docker build -t multify .
+docker run -d -p 5099:5099 --name multify multify
 ```
 
 Open **`http://127.0.0.1:5099`** in your browser.
@@ -110,8 +110,8 @@ If you prefer running directly on your host machine:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/ILostXD/mutify.git
-cd mutify
+git clone https://github.com/ILostXD/multify.git
+cd multify
 
 # 2. Install dependencies
 pip install -r requirements.txt
@@ -133,14 +133,14 @@ Navigate to **`http://127.0.0.1:5099`**.
    - **Remote server / LAN**: `http://<YOUR_SERVER_IP>:5099/callback` (e.g. `http://192.168.1.100:5099/callback`)
    - **Domain / Reverse Proxy**: `https://<YOUR_DOMAIN>/callback`
 3. Add your Spotify email under **User Management** in the developer dashboard.
-4. In Mutify Settings, enter your **Client ID**, **Client Secret**, and ensure the **Redirect URI** matches the one configured in Spotify.
+4. In Multify Settings, enter your **Client ID**, **Client Secret**, and ensure the **Redirect URI** matches the one configured in Spotify.
 
 ### YouTube Music
 - **Guest Search**: Works out of the box with zero setup.
 - **Playlist Creation**: Copy your cookie request headers from `music.youtube.com` (via browser DevTools Network tab) and paste them into the YouTube Music settings tab.
 
 ### Tidal
-1. Open Mutify Settings, select **Tidal**, and click **Link Tidal Account**.
+1. Open Multify Settings, select **Tidal**, and click **Link Tidal Account**.
 2. Click the authorization link to approve the device login on Tidal.
 3. Click **Verify Connection** to store the session.
 
@@ -149,7 +149,7 @@ Navigate to **`http://127.0.0.1:5099`**.
 ## Project Structure
 
 ```
-mutify/
+multify/
 ├── app.py                      # Flask server, OAuth routes, & API handlers
 ├── Dockerfile                  # Production container definition
 ├── docker-compose.yml          # One-command orchestration

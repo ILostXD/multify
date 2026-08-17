@@ -4,10 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mutify</title>
+  <title>Multify</title>
 
   <!-- Browser Favicon: Custom SVG Logo -->
-  <link rel="icon" type="image/svg+xml" href="/assets/Mutify_BG_Color_Logo.svg">
+  <link rel="icon" type="image/svg+xml" href="/assets/Multify_BG_Color_Logo.svg">
   <link rel="alternate icon" href="/favicon.ico">
 
   <!-- Google Fonts: Sora (Bolder weights: 400, 600, 700, 800) -->
@@ -1013,8 +1013,8 @@
 
     const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-    /* ── Mutify SVG Brand Logo Component (from Mutify_Logo.svg) ── */
-    function MutifyLogo({ size = 26, color = "#000000", style = {} }) {
+    /* ── Multify SVG Brand Logo Component (from Multify_Logo.svg) ── */
+    function MultifyLogo({ size = 26, color = "#000000", style = {} }) {
       return (
         <svg width={size} height={size} viewBox="0 0 3000 3000" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block', transform: 'translateY(-0.75px)', ...style }}>
           <path d="M1500.01,1561.89c-163.78-336.06-289.34-669.058-325.53-977.411H592.511C217.574,1169.15,1.01,1842.44,24.6,2457.15H637.937c-26.2-1147.09,37.972-2277.819,185.669-1410.77,55.915,328.24,209.454,675.07,383.784,1010.12,4.8,9.23,272.81,6.57,285.61,6.5m6.99-501.11c163.78-336.06,289.34-669.058,325.53-977.411h581.97c374.94,584.671,591.5,1257.961,567.91,1872.671H2362.06c26.2-1147.09-37.97-2277.819-185.67-1410.77-55.91,328.24-209.45,675.07-383.78,1010.12-4.8,9.23-286.81,6.57-299.61,6.5" fill={color} fillRule="evenodd" />
@@ -1230,7 +1230,7 @@
 
     /* ── Main Application Component ── */
     function App() {
-      const [theme, setTheme] = useState(() => localStorage.getItem('mutify_theme') || 'dark');
+      const [theme, setTheme] = useState(() => localStorage.getItem('multify_theme') || 'dark');
       const [loggedIn, setLoggedIn] = useState(initialLoggedIn);
       const [selectedProvider, setSelectedProvider] = useState('spotify');
       const [providersStatus, setProvidersStatus] = useState({});
@@ -1267,7 +1267,7 @@
 
       useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('mutify_theme', theme);
+        localStorage.setItem('multify_theme', theme);
       }, [theme]);
 
       const fetchStatusAndSettings = () => {
@@ -1625,7 +1625,7 @@
         const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `mutify_${selectedProvider}_missing.txt`;
+        a.download = `multify_${selectedProvider}_missing.txt`;
         a.click();
       };
 
@@ -1656,11 +1656,11 @@
           {/* Header */}
           <header className="header">
             <div className="brand-group">
-              <div className="brand-logo-disc" title="Mutify">
-                <MutifyLogo size={26} color="#000000" />
+              <div className="brand-logo-disc" title="Multify">
+                <MultifyLogo size={26} color="#000000" />
               </div>
               <div>
-                <h1 className="brand-title">Mutify</h1>
+                <h1 className="brand-title">Multify</h1>
                 <p className="brand-tagline">Multi-Service Playlist Converter</p>
               </div>
             </div>
@@ -1735,7 +1735,7 @@
                   </div>
                   <h2 style={{ fontSize: '1.45rem', fontWeight: 800, marginBottom: '0.5rem' }}>Connect Spotify to Begin</h2>
                   <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem', fontWeight: 600, maxWidth: 460, margin: '0 auto 1.5rem', lineHeight: 1.5 }}>
-                    Authorize Mutify with your Spotify account to match metadata and generate new playlists directly in your library.
+                    Authorize Multify with your Spotify account to match metadata and generate new playlists directly in your library.
                   </p>
                   <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <a href="/login" className="glass-btn glass-btn-primary" style={{ padding: '0.8rem 2.2rem', fontSize: '0.95rem' }}>

@@ -102,7 +102,7 @@ class YouTubeMusicProvider(BaseProvider):
             # video_ids are the track_uris
             playlist_id = client.create_playlist(
                 title=name,
-                description="Imported via Mutify",
+                description="Imported via Multify",
                 privacy_status="PRIVATE",
                 video_ids=track_uris
             )

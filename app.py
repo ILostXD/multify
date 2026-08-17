@@ -92,7 +92,7 @@ def serve_assets(filename):
 def favicon():
     return send_from_directory(
         os.path.join(os.path.dirname(__file__), "assets"),
-        "Mutify_BG_Color_Logo.svg",
+        "Multify_BG_Color_Logo.svg",
         mimetype="image/svg+xml"
     )
 

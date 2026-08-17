@@ -232,13 +232,22 @@ def callback():
     session["access_token"] = data["access_token"]
     session["refresh_token"] = data.get("refresh_token")
     session["token_expires_at"] = time.time() + data.get("expires_in", 3600) - 120
+    save_config({"spotify_access_token": data["access_token"], "spotify_refresh_token": data.get("refresh_token") or cfg.get("spotify_refresh_token", ""), "spotify_token_expires_at": session["token_expires_at"]})
     return redirect("/")
 
 
 def _refresh_spotify_token_if_needed():
     """Auto-refresh the Spotify access token if it's expired."""
-    expires_at = session.get("token_expires_at", 0)
-    refresh_tok = session.get("refresh_token")
+    cfg = load_config()
+    expires_at = session.get("token_expires_at") or cfg.get("spotify_token_expires_at", 0)
+    refresh_tok = session.get("refresh_token") or cfg.get("spotify_refresh_token")
+
+    if not session.get("access_token") and cfg.get("spotify_access_token") and time.time() < expires_at:
+        session["access_token"] = cfg.get("spotify_access_token")
+        session["refresh_token"] = refresh_tok
+        session["token_expires_at"] = expires_at
+        return
+
     if not refresh_tok or time.time() < expires_at:
         return
 

@@ -15,10 +15,10 @@ class SpotifyProvider(BaseProvider):
     icon = "disc"
 
     def is_authenticated(self, config: Dict[str, Any], session_data: Dict[str, Any]) -> bool:
-        return bool(session_data.get("access_token"))
+        return bool(session_data.get("access_token") or config.get("spotify_access_token") or config.get("spotify_refresh_token"))
 
     def get_auth_header(self, config: Dict[str, Any], session_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
-        token = session_data.get("access_token")
+        token = session_data.get("access_token") or config.get("spotify_access_token")
         if not token:
             return None
         return {"Authorization": f"Bearer {token}"}

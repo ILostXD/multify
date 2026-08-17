@@ -235,7 +235,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 6px 18px -3px var(--primary);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
       transition: box-shadow 0.22s ease, transform 0.22s cubic-bezier(0.2, 0, 0, 1);
       flex-shrink: 0;
       padding: 0;
@@ -243,8 +243,8 @@
     }
 
     .brand-logo-disc:hover {
-      transform: translateY(-1px) scale(1.05);
-      box-shadow: 0 10px 24px -2px var(--primary);
+      transform: translateY(-1px) scale(1.04);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
 
     .brand-title {
@@ -312,24 +312,24 @@
       background: var(--input-bg);
       color: var(--text);
       border: 1.5px solid var(--text);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), var(--glass-specular);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
 
     .dest-pill.active.spotify {
       border-color: #1db954;
-      box-shadow: 0 4px 18px -2px rgba(29, 185, 84, 0.45), var(--glass-specular);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       color: var(--text);
     }
 
     .dest-pill.active.ytmusic {
       border-color: #ff0000;
-      box-shadow: 0 4px 18px -2px rgba(255, 0, 0, 0.45), var(--glass-specular);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       color: var(--text);
     }
 
     .dest-pill.active.tidal {
       border-color: #00ffff;
-      box-shadow: 0 4px 18px -2px rgba(0, 255, 255, 0.45), var(--glass-specular);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       color: var(--text);
     }
 
@@ -371,40 +371,51 @@
       background: linear-gradient(135deg, var(--primary), var(--accent));
       color: #000 !important;
       border: none;
-      box-shadow: 0 6px 18px -3px var(--primary);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
     }
 
     .glass-btn-primary:hover {
-      box-shadow: 0 12px 28px -3px var(--primary);
-      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+      transform: translateY(-1px);
     }
 
     .glass-btn-primary:active {
-      transform: translateY(0) scale(0.97);
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
     }
 
     .glass-btn-ytmusic {
       background: linear-gradient(135deg, #ff0000, #cc0000);
       color: #fff !important;
       border: none;
-      box-shadow: 0 6px 18px -3px rgba(255, 0, 0, 0.6);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
     }
 
     .glass-btn-ytmusic:hover {
-      box-shadow: 0 12px 28px -3px rgba(255, 0, 0, 0.8);
-      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+      transform: translateY(-1px);
+    }
+
+    .glass-btn-ytmusic:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
     }
 
     .glass-btn-tidal {
       background: linear-gradient(135deg, #00ffff, #00b3b3);
       color: #000 !important;
       border: none;
-      box-shadow: 0 6px 18px -3px rgba(0, 255, 255, 0.6);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
     }
 
     .glass-btn-tidal:hover {
-      box-shadow: 0 12px 28px -3px rgba(0, 255, 255, 0.8);
-      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+      transform: translateY(-1px);
+    }
+
+    .glass-btn-tidal:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
     }
 
     .glass-btn-primary:disabled, .glass-btn-ytmusic:disabled, .glass-btn-tidal:disabled {
@@ -499,25 +510,13 @@
       transition: filter 0.22s ease;
     }
 
-    .spotify-logo {
-      filter: drop-shadow(0 8px 24px var(--primary));
+    .spotify-logo, .ytmusic-logo, .tidal-logo {
+      filter: none;
     }
-    .service-hero-logo-box:hover .spotify-logo {
-      filter: drop-shadow(0 14px 34px var(--primary));
-    }
-
-    .ytmusic-logo {
-      filter: drop-shadow(0 8px 24px rgba(255, 0, 0, 0.65));
-    }
-    .service-hero-logo-box:hover .ytmusic-logo {
-      filter: drop-shadow(0 14px 34px rgba(255, 0, 0, 0.9));
-    }
-
-    .tidal-logo {
-      filter: drop-shadow(0 8px 26px rgba(0, 255, 255, 0.55));
-    }
+    .service-hero-logo-box:hover .spotify-logo,
+    .service-hero-logo-box:hover .ytmusic-logo,
     .service-hero-logo-box:hover .tidal-logo {
-      filter: drop-shadow(0 14px 36px rgba(0, 255, 255, 0.85));
+      filter: none;
     }
 
     /* ── Dropzone Card ── */

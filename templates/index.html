@@ -1266,7 +1266,7 @@
       return titleConfident && artistConfident;
     }
 
-    const SEARCH_DELAY_MS = 450;
+    const SEARCH_DELAY_MS = 40;
     const delay = ms => new Promise(r => setTimeout(r, ms));
 
     /* ── High-Performance Memoized Track Row ── */
@@ -1694,14 +1694,13 @@
         stopSearchRef.current = false;
         setSearchProgress({ current: 0, total: trackList.length });
 
-        for (let i = 0; i < trackList.length; i++) {
-          if (stopSearchRef.current) {
-            setSearchingProvider(null);
-            return;
-          }
+        const CONCURRENCY = 4;
+        let nextIdx = 0;
+        let completed = 0;
 
+        const processTrack = async (i) => {
+          if (stopSearchRef.current || i >= trackList.length) return;
           const t = trackList[i];
-          setSearchProgress({ current: i + 1, total: trackList.length });
 
           try {
             const resp = await fetch('/search', {
@@ -1712,7 +1711,7 @@
 
             if (resp.status === 401) {
               alert(`${provider.toUpperCase()} is not authenticated. Please check Settings.`);
-              setSearchingProvider(null);
+              stopSearchRef.current = true;
               return;
             }
 
@@ -1722,13 +1721,12 @@
               setRateLimits(prev => ({ ...prev, [provider]: wait }));
               await delay(wait * 1000);
               setRateLimits(prev => ({ ...prev, [provider]: null }));
-              continue;
+              return processTrack(i);
             }
 
             const data = await resp.json();
             const candidates = data.results || [];
 
-            // Functional update prevents overriding manual user selections made during search
             setTracks(prev => {
               const next = [...prev];
               const cur = next[i];
@@ -1736,7 +1734,7 @@
               const curProv = (cur.providers && cur.providers[provider]) || {};
               let chosen = curProv.selectedUri;
               if (!chosen && candidates.length > 0 && isConfidentMatch(cur.artist, cur.title, candidates[0])) {
-                chosen = candidates[0].uri;
+                chosen = candidates[0].uri || candidates[0].id;
               }
               next[i] = {
                 ...cur,
@@ -1769,12 +1767,24 @@
               };
               return next;
             });
+          } finally {
+            completed++;
+            setSearchProgress({ current: completed, total: trackList.length });
           }
+        };
 
-          if (i < trackList.length - 1) {
-            await delay(SEARCH_DELAY_MS);
+        const worker = async () => {
+          while (nextIdx < trackList.length && !stopSearchRef.current) {
+            const currentTrackIdx = nextIdx++;
+            await processTrack(currentTrackIdx);
+            if (SEARCH_DELAY_MS > 0 && nextIdx < trackList.length) {
+              await delay(SEARCH_DELAY_MS);
+            }
           }
-        }
+        };
+
+        const workers = Array.from({ length: Math.min(CONCURRENCY, trackList.length) }, () => worker());
+        await Promise.all(workers);
 
         setSearchingProvider(null);
       };

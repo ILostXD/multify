@@ -2560,47 +2560,6 @@
                   </div>
                 )}
 
-                  </div>
-                )}
-
-                    <div style={{ padding: '1rem', borderRadius: 14, background: 'var(--input-bg)', border: '1px solid var(--card-border)', marginBottom: '1.25rem' }}>
-                      <h4 style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '0.35rem' }}>Tidal Device Authorization</h4>
-                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1rem' }}>
-                        Click below to generate a Tidal device login link. Once you approve it in Tidal, click "Verify Connection".
-                      </p>
-
-                      {tidalLoginData ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                          <a
-                            href={tidalLoginData.login_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="glass-btn glass-btn-tidal"
-                            style={{ textAlign: 'center', justifyContent: 'center' }}
-                          >
-                            <span>1. Open Tidal Authorization Link</span>
-                            <Icon name="external-link" size={14} />
-                          </a>
-                          <button
-                            onClick={checkTidalLogin}
-                            disabled={tidalPolling}
-                            className="glass-btn"
-                            style={{ justifyContent: 'center' }}
-                          >
-                            <Icon name={tidalPolling ? 'loader' : 'check'} size={15} />
-                            <span>{tidalPolling ? 'Checking Tidal…' : '2. Verify Connection'}</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <button onClick={startTidalLogin} className="glass-btn glass-btn-tidal">
-                          <Icon name="music" size={15} />
-                          <span>Link Tidal Account</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 {settingsStatus && (
                   <div style={{
                     marginTop: '1.25rem',

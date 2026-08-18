@@ -1359,6 +1359,7 @@
       const [showNewPassword, setShowNewPassword] = useState(false);
       const [passwordSuccess, setPasswordSuccess] = useState('');
       const [passwordError, setPasswordError] = useState('');
+      const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
       /* Settings Modal State */
       const [showSettings, setShowSettings] = useState(false);
@@ -1494,8 +1495,7 @@
         }
       };
 
-      const handleRemoveMasterPassword = async () => {
-        if (!confirm('Are you sure you want to remove password protection? Anyone on your network or public URL will have access to Multify.')) return;
+      const handleConfirmRemovePassword = async () => {
         setPasswordError('');
         setPasswordSuccess('');
         setIsSavingSettings(true);
@@ -2524,7 +2524,7 @@
 
                 {settingsTab === 'tidal' && (
                   <div>
-                    <div style={{ padding: '1rem', borderRadius: 14, background: 'var(--input-bg)', border: '1px solid var(--card-border)', marginBottom: '1.25rem' }}>
+                    <div className="liquid-glass" style={{ padding: '1.15rem', borderRadius: 14, marginBottom: '1.25rem' }}>
                       <h4 style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '0.35rem' }}>Tidal Device Authorization</h4>
                       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1rem' }}>
                         Click below to generate a Tidal device login link. Once you approve it in Tidal, click "Verify Connection".
@@ -2572,7 +2572,7 @@
 
                 {settingsTab === 'security' && (
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1rem', background: 'var(--input-bg)', borderRadius: 12, border: '1px solid var(--input-border)', marginBottom: '1.25rem' }}>
+                    <div className="liquid-glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.95rem 1.15rem', borderRadius: 14, marginBottom: '1.25rem' }}>
                       <div>
                         <div style={{ fontSize: '0.88rem', fontWeight: 800 }}>Protection Status</div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -2639,12 +2639,12 @@
                           {settingsForm.has_password ? (
                             <button
                               type="button"
-                              onClick={handleRemoveMasterPassword}
+                              onClick={() => setShowRemoveConfirm(true)}
                               disabled={isSavingSettings}
-                              className="glass-btn"
-                              style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
+                              className="glass-btn glass-btn-danger"
+                              style={{ padding: '0.4rem 0.85rem', fontSize: '0.78rem' }}
                             >
-                              <Icon name="trash-2" size={14} />
+                              <Icon name="stop-circle" size={14} />
                               <span>Remove Password</span>
                             </button>
                           ) : <div></div>}
@@ -2671,6 +2671,80 @@
                     border: `1px solid ${settingsStatus.type === 'success' ? 'var(--success-border)' : 'var(--danger-border)'}`
                   }}>
                     {settingsStatus.message}
+                  </div>
+                )}
+
+                {/* Custom Liquid Glass Remove Password Confirmation Dialog */}
+                {showRemoveConfirm && (
+                  <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(0, 0, 0, 0.65)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10000,
+                    padding: '1.5rem'
+                  }}>
+                    <div className="liquid-glass" style={{
+                      width: '100%',
+                      maxWidth: '400px',
+                      padding: '1.75rem 1.5rem',
+                      borderRadius: 20,
+                      boxShadow: 'var(--glass-shadow-lg), var(--glass-specular)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.85rem' }}>
+                        <div style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: '50%',
+                          background: 'var(--danger-bg)',
+                          border: '1px solid var(--danger-border)',
+                          color: 'var(--danger)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <Icon name="alert-triangle" size={18} />
+                        </div>
+                        <div>
+                          <h4 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>Remove Password?</h4>
+                          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, margin: 0 }}>Protection will be disabled</p>
+                        </div>
+                      </div>
+
+                      <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: '1.4rem' }}>
+                        Anyone who accesses this Multify instance will be able to search songs, view API keys, and convert playlists without entering a password.
+                      </p>
+
+                      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => setShowRemoveConfirm(false)}
+                          disabled={isSavingSettings}
+                          className="glass-btn"
+                          style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
+                        >
+                          <span>Cancel</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setShowRemoveConfirm(false);
+                            await handleConfirmRemovePassword();
+                          }}
+                          disabled={isSavingSettings}
+                          className="glass-btn glass-btn-danger"
+                          style={{ padding: '0.5rem 1.15rem', fontSize: '0.82rem', fontWeight: 700 }}
+                        >
+                          <Icon name={isSavingSettings ? 'loader' : 'stop-circle'} size={14} />
+                          <span>Remove Password</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

@@ -1258,6 +1258,12 @@
 
     function isConfidentMatch(searchedArtist, searchedTitle, candidate) {
       if (!candidate) return false;
+
+      // Automatically reject covers, karaoke, or alternate covers from confident auto-selection
+      if (candidate.match_badge && ['Cover', 'Karaoke', 'Alternate'].includes(candidate.match_badge)) {
+        return false;
+      }
+
       const sTitle = normalizeStr(searchedTitle);
       const cTitle = normalizeStr(candidate.name);
       if (!sTitle || !cTitle) return false;
@@ -1282,7 +1288,10 @@
         const artistExact = (sArtist === cArtist);
         const artistIncludes = cArtist.includes(sArtist) || sArtist.includes(cArtist);
         
-        // Multi-artist splitting
+        const sArtistNoThe = sArtist.startsWith('the ') ? sArtist.slice(4) : sArtist;
+        const cArtistNoThe = cArtist.startsWith('the ') ? cArtist.slice(4) : cArtist;
+        const noTheMatch = (sArtistNoThe === cArtistNoThe) || cArtistNoThe.includes(sArtistNoThe) || sArtistNoThe.includes(cArtistNoThe);
+
         const subArtists = searchedArtist.split(/[•/;,]|\s+&\s+|\s+(?:feat|ft|vs|with)\.?\s+/i)
           .map(a => normalizeStr(a))
           .filter(Boolean);
@@ -1294,10 +1303,11 @@
           if (cArtist.includes(w)) matchArtistWords++;
         }
         const artistRatio = artistWords.length > 0 ? (matchArtistWords / artistWords.length) : 0;
-        artistConfident = artistExact || artistIncludes || anySubArtistMatches || (artistRatio >= 0.25);
+        artistConfident = artistExact || artistIncludes || noTheMatch || anySubArtistMatches || (artistRatio >= 0.3);
       }
 
-      return titleConfident && (artistConfident || titleExact);
+      // Both title and artist must be confident
+      return titleConfident && artistConfident;
     }
 
     const SEARCH_DELAY_MS = 60;

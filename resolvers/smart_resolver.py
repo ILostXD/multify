@@ -47,6 +47,12 @@ def extract_artist_variations(artist: str) -> List[str]:
     if norm and norm not in variations:
         variations.append(norm)
 
+    # Strip "The " prefix
+    if norm.lower().startswith("the "):
+        no_the = norm[4:].strip()
+        if no_the and no_the not in variations:
+            variations.append(no_the)
+
     leet = re.sub(r"\$", "s", norm, flags=re.IGNORECASE)
     clean_punct = re.sub(r"[\$\.]", "", norm)
     for v in [leet, clean_punct]:
@@ -59,6 +65,10 @@ def extract_artist_variations(artist: str) -> List[str]:
         p_c = p.strip()
         if p_c and p_c not in variations:
             variations.append(p_c)
+        if p_c.lower().startswith("the "):
+            p_no_the = p_c[4:].strip()
+            if p_no_the and p_no_the not in variations:
+                variations.append(p_no_the)
         p_clean = re.sub(r"[\$\.]", "", p_c).strip()
         if p_clean and p_clean not in variations:
             variations.append(p_clean)
@@ -74,7 +84,6 @@ def extract_title_variations(title: str) -> List[str]:
     if norm and norm not in variations:
         variations.append(norm)
 
-    # Leetspeak: Ca$ino -> Casino, BACKROOMS -> BACKR00MS
     leet_s = re.sub(r"\$", "s", norm, flags=re.IGNORECASE)
     if leet_s and leet_s not in variations:
         variations.append(leet_s)
@@ -87,7 +96,6 @@ def extract_title_variations(title: str) -> List[str]:
     if leet_oo and leet_oo not in variations:
         variations.append(leet_oo)
 
-    # Strip (feat. ...)
     t_no_feat = re.sub(r"\s*[\(\[\{](?:feat|ft|with|featuring)[^\)\]\}]*[\)\]\}]\s*", " ", norm, flags=re.IGNORECASE).strip()
     t_no_feat = re.sub(r"\s+(?:feat|ft|with)\.?\s+.*$", "", t_no_feat, flags=re.IGNORECASE).strip()
     if t_no_feat and t_no_feat not in variations:
@@ -119,10 +127,12 @@ def score_candidate(cand: Dict[str, Any], target_artist: str, target_title: str,
     # 1. Artist Matching (0 - 50 pts)
     artist_exact = False
     if t_art and c_art:
-        if t_art == c_art:
+        t_no_the = t_art[4:] if t_art.startswith("the ") else t_art
+        c_no_the = c_art[4:] if c_art.startswith("the ") else c_art
+        if t_art == c_art or t_no_the == c_no_the:
             score += 50.0
             artist_exact = True
-        elif t_art in c_art or c_art in t_art:
+        elif t_art in c_art or c_art in t_art or t_no_the in c_no_the or c_no_the in t_no_the:
             score += 42.0
             artist_exact = True
         else:
@@ -138,7 +148,6 @@ def score_candidate(cand: Dict[str, Any], target_artist: str, target_title: str,
     # 2. Title Matching (0 - 40 pts)
     title_exact = False
     if t_tit and c_tit:
-        # Check leetspeak normalized titles (e.g. backrooms vs backr00ms)
         t_tit_norm = t_tit.replace("00", "oo").replace("$", "s")
         c_tit_norm = c_tit.replace("00", "oo").replace("$", "s")
         if t_tit == c_tit or t_tit_norm == c_tit_norm:
@@ -178,7 +187,7 @@ def score_candidate(cand: Dict[str, Any], target_artist: str, target_title: str,
 
     # 5. Popularity boost (0 - 5 pts)
     pop = cand.get("popularity", 0)
-    score += (pop / 100.0) * 5.0
+    score += (min(pop, 1000000) / 1000000.0) * 5.0
 
     # 6. Badge determination
     if not is_penalty:
@@ -219,7 +228,7 @@ def _safe_fetch_deezer(q: str, retries: int = 2) -> List[Dict[str, Any]]:
 
 class SmartResolver:
     """
-    Intelligent Adaptive Multi-Tier Open Catalog Resolver with Quota Protection & Scoring.
+    Intelligent Adaptive Multi-Tier Open Catalog Resolver with Multi-Query Pooling & Scoring.
     """
 
     @classmethod
@@ -234,45 +243,43 @@ class SmartResolver:
         seen_ids = set()
         raw_candidates: List[Dict[str, Any]] = []
 
-        # 1. First attempt: Primary query (resolves 90% of tracks without burning API quota)
-        primary_q = f"{art_vars[0]} {tit_vars[0]}".strip()
-        dz_results = _safe_fetch_deezer(primary_q)
+        # Construct prioritized query set
+        queries = [
+            f"{art_vars[0]} {tit_vars[0]}".strip(),
+            f'artist:"{art_vars[0]}" track:"{tit_vars[0]}"',
+            tit_vars[0].strip()
+        ]
+        if len(art_vars) > 1:
+            queries.append(f"{art_vars[1]} {tit_vars[0]}".strip())
+        if len(tit_vars) > 1:
+            queries.append(f"{art_vars[0]} {tit_vars[1]}".strip())
 
-        # 2. Second attempt: Precision query if 0 results
-        if not dz_results and len(art_vars) > 0 and len(tit_vars) > 0:
-            prec_q = f'artist:"{art_vars[0]}" track:"{tit_vars[0]}"'
-            dz_results = _safe_fetch_deezer(prec_q)
-
-        # 3. Third attempt: Pure title query or secondary variation if still 0 results
-        if not dz_results and len(tit_vars) > 1:
-            alt_q = f"{art_vars[0]} {tit_vars[1]}".strip()
-            dz_results = _safe_fetch_deezer(alt_q)
-        if not dz_results and tit_vars:
-            dz_results = _safe_fetch_deezer(tit_vars[0])
-
-        # Process Deezer items
-        for trk in dz_results:
-            tid = f"dz_{trk.get('id')}"
-            if tid in seen_ids:
-                continue
-            seen_ids.add(tid)
-            album_info = trk.get("album", {})
-            raw_candidates.append({
-                "id": tid,
-                "raw_id": trk.get("id"),
-                "source": "deezer",
-                "name": trk.get("title", ""),
-                "artists": trk.get("artist", {}).get("name", ""),
-                "album": album_info.get("title", ""),
-                "album_art": album_info.get("cover_big") or album_info.get("cover_medium", ""),
-                "album_type": "album",
-                "album_artists": trk.get("artist", {}).get("name", ""),
-                "popularity": int(trk.get("rank", 0) / 10000) if trk.get("rank") else 75,
-                "duration_ms": int(trk.get("duration", 0) * 1000),
-                "preview_url": trk.get("preview", ""),
-                "deezer_id": trk.get("id"),
-                "isrc": None
-            })
+        # Execute queries in order, aggregating all distinct track hits
+        for q in queries:
+            dz_data = _safe_fetch_deezer(q)
+            for trk in dz_data:
+                tid = f"dz_{trk.get('id')}"
+                if tid not in seen_ids:
+                    seen_ids.add(tid)
+                    album_info = trk.get("album", {})
+                    raw_candidates.append({
+                        "id": tid,
+                        "raw_id": trk.get("id"),
+                        "source": "deezer",
+                        "name": trk.get("title", ""),
+                        "artists": trk.get("artist", {}).get("name", ""),
+                        "album": album_info.get("title", ""),
+                        "album_art": album_info.get("cover_big") or album_info.get("cover_medium", ""),
+                        "album_type": "album",
+                        "album_artists": trk.get("artist", {}).get("name", ""),
+                        "popularity": trk.get("rank", 0),
+                        "duration_ms": int(trk.get("duration", 0) * 1000),
+                        "preview_url": trk.get("preview", ""),
+                        "deezer_id": trk.get("id"),
+                        "isrc": None
+                    })
+            if len(raw_candidates) >= 10:
+                break
 
         # ── Composite Scoring, Ranking, and Match Badging ─────────────────────
         scored_candidates = []

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-M3UTify — Multi-Service Playlist Converter
+Multify — Multi-Service Playlist Converter
 -----------------------------------------
 Self-hosted web app that converts .m3u8 playlists (e.g. exported from
 Navidrome, Plex, Jellyfin) into Spotify, YouTube Music, or Tidal playlists,
@@ -296,6 +296,11 @@ def _refresh_spotify_token_if_needed():
             if data.get("refresh_token"):
                 session["refresh_token"] = data["refresh_token"]
             session["token_expires_at"] = time.time() + data.get("expires_in", 3600) - 120
+            save_config({
+                "spotify_access_token": session["access_token"],
+                "spotify_refresh_token": session.get("refresh_token") or cfg.get("spotify_refresh_token", ""),
+                "spotify_token_expires_at": session["token_expires_at"]
+            })
     except Exception:
         pass
 

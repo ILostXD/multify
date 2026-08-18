@@ -23,6 +23,7 @@ ytmusic_oauth.json
 
 # Exported Missing Text Lists
 mutify_*_missing.txt
+multify_*_missing.txt
 *_missing.txt
 
 # IDEs & OS files
@@ -35,3 +36,7 @@ Thumbs.db
 
 # Docker persistent data directory
 data/
+
+# Knowledge graph and agent artifacts
+graphify-out/
+.agents/

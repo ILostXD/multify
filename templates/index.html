@@ -1237,7 +1237,7 @@
         if (cTitle.includes(w)) matchingWords++;
       }
       const titleRatio = titleWords.length > 0 ? (matchingWords / titleWords.length) : 0;
-      const titleConfident = titleExact || titleStarts || (titleIncludes && titleRatio >= 0.7) || (titleRatio >= 0.75);
+      const titleConfident = titleExact || titleStarts || (titleIncludes && titleRatio >= 0.55) || (titleRatio >= 0.6);
 
       const sArtist = normalizeStr(searchedArtist);
       const cArtist = normalizeStr(candidate.artists);
@@ -1247,13 +1247,20 @@
       } else {
         const artistExact = (sArtist === cArtist);
         const artistIncludes = cArtist.includes(sArtist) || sArtist.includes(cArtist);
+        
+        // Multi-artist splitting (check if any primary or individual artist matches)
+        const subArtists = searchedArtist.split(/[•/;,]|\s+&\s+|\s+(?:feat|ft|vs|with)\.?\s+/i)
+          .map(a => normalizeStr(a))
+          .filter(Boolean);
+        const anySubArtistMatches = subArtists.some(sa => sa && (cArtist.includes(sa) || sa.includes(cArtist)));
+
         const artistWords = sArtist.split(' ').filter(w => w.length > 1);
         let matchArtistWords = 0;
         for (const w of artistWords) {
           if (cArtist.includes(w)) matchArtistWords++;
         }
         const artistRatio = artistWords.length > 0 ? (matchArtistWords / artistWords.length) : 0;
-        artistConfident = artistExact || artistIncludes || (artistRatio >= 0.5);
+        artistConfident = artistExact || artistIncludes || anySubArtistMatches || (artistRatio >= 0.35);
       }
 
       return titleConfident && artistConfident;
@@ -1273,7 +1280,7 @@
         statusClass = pData.candidates.length === 0 ? 'status-unmatched' : 'status-review';
       }
 
-      const selectedCandidate = pData.candidates.find(c => c.uri === pData.selectedUri);
+      const selectedCandidate = pData.candidates.find(c => (c.uri && c.uri === pData.selectedUri) || (c.id && c.id === pData.selectedUri)) || (pData.candidates.length > 0 ? pData.candidates[0] : null);
       const artSrc = selectedCandidate ? selectedCandidate.album_art : '';
 
       return (
@@ -1326,11 +1333,14 @@
                     ? '— Choose match —'
                     : '[No exact match] — Select option or skip'}
                 </option>
-                {pData.candidates.map(c => (
-                  <option key={c.uri} value={c.uri}>
-                    {c.name} — {c.artists} {c.album ? `(${c.album})` : ''}
-                  </option>
-                ))}
+                {pData.candidates.map((c, cIdx) => {
+                  const optVal = c.uri || c.id || String(cIdx);
+                  return (
+                    <option key={optVal} value={optVal}>
+                      {c.name} — {c.artists} {c.album ? `(${c.album})` : ''}
+                    </option>
+                  );
+                })}
                 <option value="skip">Skip this track</option>
               </select>
             )}

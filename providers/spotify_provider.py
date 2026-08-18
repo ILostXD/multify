@@ -4,7 +4,7 @@ import time
 import requests
 from typing import List, Dict, Any, Optional, Tuple
 from providers import BaseProvider
-from resolvers.smart_resolver import SmartResolver, _clean_string
+from resolvers.smart_resolver import SmartResolver, extract_artist_variations, extract_title_variations
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -66,187 +66,77 @@ class SpotifyProvider(BaseProvider):
 
     def search(self, artist: str, title: str, album: str, config: Dict[str, Any], session_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Optional[int]]:
         headers = self.get_auth_header(config, session_data)
-        if not headers:
-            return [], None
-
+        
+        # 1. Fetch Multi-Option Candidates via SmartResolver (Deezer + iTunes + ISRC)
+        open_candidates = SmartResolver.get_candidates(artist, title, album)
+        
         results = []
         seen_ids = set()
 
-        clean_title = _clean_string(title) or title
-        clean_artist = _clean_string(artist) or artist
-        clean_album = _clean_string(album) if album else ""
-
-        # ── Tier 1: Smart Open Catalog & ISRC Resolution (Zero Quota) ─────────
-        meta = {}
-        try:
-            meta = SmartResolver.get_isrc_and_metadata(clean_artist, clean_title, clean_album)
-            isrc = meta.get("isrc")
-            if isrc:
-                isrc_hits, retry = self._spotify_search(f"isrc:{isrc}", headers, seen_ids)
+        # If Spotify is authenticated, attempt fast precision lookup on Spotify
+        rate_limit_hit = False
+        if headers:
+            # Check ISRC on top candidate
+            top_isrc = open_candidates[0].get("isrc") if open_candidates else None
+            if top_isrc:
+                isrc_hits, retry = self._spotify_search(f"isrc:{top_isrc}", headers, seen_ids)
                 if isrc_hits:
-                    return isrc_hits, None
+                    results += isrc_hits
+                elif retry:
+                    rate_limit_hit = True
 
-            # Check Songlink cross-platform bridge (using Deezer ID or iTunes URL)
-            track_url = ""
-            if meta.get("deezer_id"):
-                track_url = f"https://www.deezer.com/track/{meta['deezer_id']}"
-            elif meta.get("itunes_url"):
-                track_url = meta["itunes_url"]
+            # If no ISRC hits and not rate limited, try single relevance query
+            if not results and not rate_limit_hit:
+                art_vars = extract_artist_variations(artist)
+                tit_vars = extract_title_variations(title)
+                q = f"{art_vars[0]} {tit_vars[0]}".strip()
+                hits, retry = self._spotify_search(q, headers, seen_ids)
+                if hits:
+                    results += hits
+                elif retry:
+                    rate_limit_hit = True
 
-            if track_url:
-                links = SmartResolver.resolve_cross_platform_links(track_url)
-                sp_id = links.get("spotify_id")
-                if sp_id and sp_id not in seen_ids:
-                    try:
-                        trk_resp = requests.get(f"{SPOTIFY_API_BASE}/tracks/{sp_id}", headers=headers, timeout=6)
-                        if trk_resp.status_code == 200:
-                            t = trk_resp.json()
-                            seen_ids.add(sp_id)
-                            album_info = t.get("album", {})
-                            images = album_info.get("images", [])
-                            art = images[0]["url"] if images else meta.get("artwork_url", "")
-                            album_artists_str = ", ".join(a["name"] for a in album_info.get("artists", []))
-                            results.append({
-                                "id": sp_id,
-                                "uri": t["uri"],
-                                "name": t["name"],
-                                "artists": ", ".join(a["name"] for a in t.get("artists", [])),
-                                "album": album_info.get("name", ""),
-                                "album_art": art,
-                                "album_type": album_info.get("album_type", "album"),
-                                "album_artists": album_artists_str,
-                                "popularity": t.get("popularity", 90),
-                                "duration_ms": t.get("duration_ms", 0),
-                                "preview_url": t.get("preview_url") or meta.get("preview_url")
-                            })
-                            return results, None
-                        elif trk_resp.status_code != 429:
-                            results.append({
-                                "id": sp_id,
-                                "uri": f"spotify:track:{sp_id}",
-                                "name": meta.get("title", clean_title),
-                                "artists": meta.get("artist", clean_artist),
-                                "album": meta.get("album", ""),
-                                "album_art": meta.get("artwork_url", ""),
-                                "album_type": "album",
-                                "album_artists": meta.get("artist", clean_artist),
-                                "popularity": 90,
-                                "duration_ms": meta.get("duration_ms", 0),
-                                "preview_url": meta.get("preview_url")
-                            })
-                            return results, None
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        # 2. Integrate and format open candidates (providing multiple dropdown options)
+        for c in open_candidates:
+            cid = c.get("id") or str(c.get("raw_id"))
+            if cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            
+            # Ensure every candidate has a distinct, valid URI for React dropdown selection
+            uri_val = c.get("uri")
+            if not uri_val:
+                if c.get("isrc"):
+                    uri_val = f"spotify:track:{c['isrc']}"
+                elif c.get("raw_id"):
+                    uri_val = f"spotify:track:{c['source']}_{c['raw_id']}"
+                else:
+                    uri_val = f"spotify:track:{cid}"
 
-        # ── Tier 2: Spotify Relevance Query (Single Shot) ────────────────────
-        rate_limit_retry = None
-        if not results and clean_artist and clean_title:
-            q1 = f"{clean_artist} {clean_title}".strip()
-            hits, retry = self._spotify_search(q1, headers, seen_ids)
-            if retry:
-                rate_limit_retry = retry
-            elif hits:
-                results += hits
-
-        # ── Tier 3: Strict & Album Fallbacks (Only if 0 results & not rate-limited) ──
-        if not results and not rate_limit_retry and clean_artist and clean_album and clean_title:
-            q2 = f"{clean_artist} {clean_album} {clean_title}".strip()
-            hits, retry = self._spotify_search(q2, headers, seen_ids)
-            if retry:
-                rate_limit_retry = retry
-            elif hits:
-                results += hits
-
-        if not results and not rate_limit_retry and clean_artist and clean_title:
-            q3 = f'track:"{clean_title}" artist:"{clean_artist}"'
-            hits, retry = self._spotify_search(q3, headers, seen_ids)
-            if retry:
-                rate_limit_retry = retry
-            elif hits:
-                results += hits
-        elif not results and not rate_limit_retry and clean_title:
-            hits, retry = self._spotify_search(clean_title, headers, seen_ids)
-            if retry:
-                rate_limit_retry = retry
-            elif hits:
-                results += hits
-
-        # ── Tier 4: Open Catalog Graceful Fallback on Spotify 429 ─────────────
-        if not results and rate_limit_retry and meta and meta.get("title") and (meta.get("isrc") or meta.get("artwork_url")):
-            isrc_code = meta.get("isrc") or ""
-            track_ident = f"isrc:{isrc_code}" if isrc_code else f"meta:{clean_title}"
             results.append({
-                "id": track_ident,
-                "uri": f"spotify:track:{isrc_code}" if isrc_code else "",
-                "name": meta.get("title", clean_title),
-                "artists": meta.get("artist", clean_artist),
-                "album": meta.get("album", clean_album),
-                "album_art": meta.get("artwork_url", ""),
-                "album_type": "album",
-                "album_artists": meta.get("artist", clean_artist),
-                "popularity": 85,
-                "duration_ms": meta.get("duration_ms", 0),
-                "preview_url": meta.get("preview_url")
+                "id": cid,
+                "uri": uri_val,
+                "name": c.get("name", title),
+                "artists": c.get("artists", artist),
+                "album": c.get("album", album or ""),
+                "album_art": c.get("album_art", ""),
+                "album_type": c.get("album_type", "album"),
+                "album_artists": c.get("album_artists", artist),
+                "popularity": c.get("popularity", 75),
+                "duration_ms": c.get("duration_ms", 0),
+                "preview_url": c.get("preview_url", "")
             })
-            return results, None
-
-        if not results and rate_limit_retry:
-            return [], min(rate_limit_retry, 5)
 
         if not results:
-            return results, None
+            return [], None
 
-        # Prioritize studio albums over random playlists/compilations
-        artist_lower = artist.lower().strip()
-        album_lower = album.lower().strip() if album else ""
-        compilation_keywords = [
-            "greatest", "50 jahre", "hip hop", "hits", "best of", "top ", "playlist",
-            "vol.", "anthology", "collection", "tribute", "classics", "summer",
-            "workout", "party", "favourites", "capsule", "essence", "just rap",
-            "chill", "rhythmic", "fyp", "virales", "top songs", "new years", "compilation"
-        ]
-
-        def _sort_key(item):
-            track_artists = item.get("artists", "").lower()
-            album_artists = item.get("album_artists", "").lower()
-            item_album_name = item.get("album", "").lower()
-            album_type = item.get("album_type", "compilation")
-
-            is_artist_album = bool(artist_lower and artist_lower in album_artists)
-            is_track_artist = bool(artist_lower and artist_lower in track_artists)
-            is_various = "various" in album_artists
-            is_compilation_named = any(kw in item_album_name for kw in compilation_keywords)
-            is_compilation = is_various or album_type == "compilation" or is_compilation_named
-            exact_album_match = bool(album_lower and (album_lower in item_album_name or item_album_name in album_lower))
-
-            if exact_album_match and is_artist_album:
-                tier = -1
-            elif is_artist_album and not is_compilation and album_type == "album":
-                tier = 0
-            elif is_artist_album and not is_compilation and album_type == "single":
-                tier = 1
-            elif is_artist_album:
-                tier = 2
-            elif is_track_artist and is_compilation:
-                tier = 10
-            elif is_track_artist:
-                tier = 15
-            else:
-                tier = 20
-
-            popularity = item.get("popularity", 0)
-            return (tier, -popularity)
-
-        results.sort(key=_sort_key)
         return results[:8], None
 
     def _spotify_search(self, query: str, headers: Dict[str, str], seen_ids: set) -> Tuple[List[Dict[str, Any]], Optional[int]]:
         url = f"{SPOTIFY_API_BASE}/search"
-        params = {"q": query, "type": "track", "limit": 6}
+        params = {"q": query, "type": "track", "limit": 5}
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            resp = requests.get(url, headers=headers, params=params, timeout=8)
             if resp.status_code == 429:
                 hdr = resp.headers.get("Retry-After", "5")
                 try:
@@ -290,14 +180,14 @@ class SpotifyProvider(BaseProvider):
         if not headers:
             return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
-        # Resolve URIs (handling 22-char IDs, episodes, and ISRC resolutions)
+        # Resolve URIs (handling 22-char Spotify IDs, episodes, and ISRC/open resolutions)
         resolved_uris = []
         for u in track_uris:
             if not u or not isinstance(u, str):
                 continue
             u = u.strip()
             # Standard Spotify URI: "spotify:track:..." (36 chars) or "spotify:episode:..."
-            if (u.startswith("spotify:track:") and len(u) == 36) or u.startswith("spotify:episode:"):
+            if (u.startswith("spotify:track:") and len(u) == 36 and "_" not in u) or u.startswith("spotify:episode:"):
                 resolved_uris.append(u)
             elif u.startswith("spotify:track:") or u.startswith("isrc:"):
                 code = u.replace("spotify:track:", "").replace("isrc:", "").strip()

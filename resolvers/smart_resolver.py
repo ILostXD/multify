@@ -9,33 +9,62 @@ DEEZER_TRACK_URL = "https://api.deezer.com/track"
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 SONGLINK_API_URL = "https://api.song.link/v1-alpha.1/links"
 
-# In-memory LRU caches
 _ISRC_CACHE: Dict[str, Optional[str]] = {}
 _SONGLINK_CACHE: Dict[str, Dict[str, Any]] = {}
-_RESOLVER_CACHE: Dict[str, Any] = {}
+_CANDIDATES_CACHE: Dict[str, List[Dict[str, Any]]] = {}
 
 
 def _clean_string(s: str) -> str:
     if not s:
         return ""
-    # Remove file extensions
     s = re.sub(r"\.(mp3|flac|m4a|wav|aac|ogg|opus|alac)$", "", s, flags=re.IGNORECASE)
-    # Remove track numbers at start e.g. "01 - Title" or "01. Title"
     s = re.sub(r"^\d+[\s\.\-_]+", "", s)
-    # Remove bracketed noise
-    s = re.sub(r"\s*[\(\[\{](?:official|feat|ft|audio|video|remaster|remastered|explicit|deluxe|version|edit|bonus|single|album|extended|mix)[^\)\]\}]*[\)\]\}]\s*", " ", s, flags=re.IGNORECASE)
-    # Strip standalone ft./feat.
-    s = re.sub(r"\s+(?:feat|ft)\.?\s+.*$", "", s, flags=re.IGNORECASE)
-    # Normalize whitespace
+    s = re.sub(r"\s*[\(\[\{](?:official|audio|video|remaster|remastered|explicit|deluxe|version|edit|bonus|single|album|extended|mix)[^\)\]\}]*[\)\]\}]\s*", " ", s, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", s).strip()
 
 
-def extract_primary_artist(artist: str) -> str:
-    """Extracts the first primary artist from multi-artist tags separated by •, /, ;, ,, &, feat, ft."""
+def extract_artist_variations(artist: str) -> List[str]:
     if not artist:
-        return ""
+        return []
+    cleaned = _clean_string(artist)
+    variations = []
+    if cleaned:
+        variations.append(cleaned)
+    # Split on delimiters
     parts = re.split(r"\s*(?:[•/;,]|(?:\s+&\s+)|\s+(?:feat|ft|vs|with)\.?\s+)\s*", artist, flags=re.IGNORECASE)
-    return parts[0].strip() if parts else artist.strip()
+    for p in parts:
+        p_c = _clean_string(p)
+        if p_c and p_c not in variations:
+            variations.append(p_c)
+    return variations or [artist.strip()]
+
+
+def extract_title_variations(title: str) -> List[str]:
+    if not title:
+        return []
+    raw = title.strip()
+    variations = [raw]
+    
+    # Strip (feat. ...)
+    t_no_feat = re.sub(r"\s*[\(\[\{](?:feat|ft|with|featuring)[^\)\]\}]*[\)\]\}]\s*", " ", raw, flags=re.IGNORECASE).strip()
+    t_no_feat = re.sub(r"\s+(?:feat|ft|with)\.?\s+.*$", "", t_no_feat, flags=re.IGNORECASE).strip()
+    if t_no_feat and t_no_feat not in variations:
+        variations.append(t_no_feat)
+
+    # Clean bracketed tags
+    t_clean = _clean_string(raw)
+    if t_clean and t_clean not in variations:
+        variations.append(t_clean)
+
+    # Handle dual titles separated by "/" e.g. "911 / Mr. Lonely"
+    if "/" in raw:
+        parts = [p.strip() for p in raw.split("/") if p.strip()]
+        for p in parts:
+            p_clean = re.sub(r"\s*[\(\[\{][^\)\]\}]*[\)\]\}]\s*", "", p).strip()
+            if p_clean and p_clean not in variations:
+                variations.append(p_clean)
+
+    return variations
 
 
 def _similarity(a: str, b: str) -> float:
@@ -46,111 +75,111 @@ def _similarity(a: str, b: str) -> float:
 
 class SmartResolver:
     """
-    Multi-tier smart resolver that queries open music catalogs (Deezer, iTunes, Songlink)
-    to extract ISRCs and cross-platform identifiers, drastically reducing Spotify API calls.
+    High-performance Multi-Tier Open Catalog Resolver.
+    Fetches multiple candidate options from Deezer, iTunes, and Songlink with ISRC enrichment.
     """
 
     @classmethod
-    def get_isrc_and_metadata(cls, artist: str, title: str, album: str = "") -> Dict[str, Any]:
-        """
-        Attempts to find the master ISRC and enriched metadata using free public endpoints.
-        """
-        clean_art = _clean_string(artist)
-        clean_tit = _clean_string(title)
-        primary_art = extract_primary_artist(clean_art)
-        cache_key = f"{clean_art.lower()}:::{clean_tit.lower()}"
+    def get_candidates(cls, artist: str, title: str, album: str = "") -> List[Dict[str, Any]]:
+        cache_key = f"{artist.lower().strip()}:::{title.lower().strip()}:::{album.lower().strip()}"
+        if cache_key in _CANDIDATES_CACHE:
+            return _CANDIDATES_CACHE[cache_key]
 
-        if cache_key in _ISRC_CACHE and _ISRC_CACHE[cache_key]:
-            return {"isrc": _ISRC_CACHE[cache_key], "artist": clean_art, "title": clean_tit, "primary_artist": primary_art}
+        art_vars = extract_artist_variations(artist)
+        tit_vars = extract_title_variations(title)
+        
+        seen_ids = set()
+        candidates: List[Dict[str, Any]] = []
 
-        result: Dict[str, Any] = {
-            "isrc": None,
-            "artist": clean_art,
-            "primary_artist": primary_art,
-            "title": clean_tit,
-            "album": album,
-            "artwork_url": "",
-            "preview_url": "",
-            "deezer_id": None,
-            "itunes_url": None,
-            "duration_ms": 0
-        }
+        # 1. Query Deezer with top variations
+        for a in art_vars[:2]:
+            for t in tit_vars[:2]:
+                q = f"{a} {t}".strip()
+                try:
+                    resp = requests.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 4}, timeout=3.5)
+                    if resp.status_code == 200:
+                        for trk in resp.json().get("data", []):
+                            tid = f"dz_{trk.get('id')}"
+                            if tid in seen_ids:
+                                continue
+                            seen_ids.add(tid)
+                            
+                            album_info = trk.get("album", {})
+                            candidates.append({
+                                "id": tid,
+                                "raw_id": trk.get("id"),
+                                "source": "deezer",
+                                "name": trk.get("title", ""),
+                                "artists": trk.get("artist", {}).get("name", ""),
+                                "album": album_info.get("title", ""),
+                                "album_art": album_info.get("cover_big") or album_info.get("cover_medium", ""),
+                                "album_type": "album",
+                                "album_artists": trk.get("artist", {}).get("name", ""),
+                                "popularity": int(trk.get("rank", 0) / 10000) if trk.get("rank") else 75,
+                                "duration_ms": int(trk.get("duration", 0) * 1000),
+                                "preview_url": trk.get("preview", ""),
+                                "deezer_id": trk.get("id"),
+                                "isrc": None
+                            })
+                except Exception:
+                    pass
+                if len(candidates) >= 5:
+                    break
+            if len(candidates) >= 5:
+                break
 
-        # 1. Query Deezer Open API (Try clean artist first, then primary artist)
-        queries_to_try = [f"{clean_art} {clean_tit}".strip()]
-        if primary_art and primary_art != clean_art:
-            queries_to_try.append(f"{primary_art} {clean_tit}".strip())
+        # 2. Query iTunes Search API (top 3)
+        for a in art_vars[:1]:
+            for t in tit_vars[:2]:
+                q = f"{a} {t}".strip()
+                try:
+                    resp = requests.get(ITUNES_SEARCH_URL, params={"term": q, "entity": "song", "limit": 3}, timeout=3.5)
+                    if resp.status_code == 200:
+                        for trk in resp.json().get("results", []):
+                            tid = f"itunes_{trk.get('trackId')}"
+                            if tid in seen_ids:
+                                continue
+                            seen_ids.add(tid)
+                            art = trk.get("artworkUrl100", "")
+                            art_hi = art.replace("100x100bb.jpg", "600x600bb.jpg") if art else ""
+                            candidates.append({
+                                "id": tid,
+                                "raw_id": trk.get("trackId"),
+                                "source": "itunes",
+                                "name": trk.get("trackName", ""),
+                                "artists": trk.get("artistName", ""),
+                                "album": trk.get("collectionName", ""),
+                                "album_art": art_hi,
+                                "album_type": "album",
+                                "album_artists": trk.get("artistName", ""),
+                                "popularity": 80,
+                                "duration_ms": int(trk.get("trackTimeMillis", 0)),
+                                "preview_url": trk.get("previewUrl", ""),
+                                "itunes_url": trk.get("trackViewUrl", ""),
+                                "isrc": None
+                            })
+                except Exception:
+                    pass
+                if len(candidates) >= 6:
+                    break
 
-        for q in queries_to_try:
+        # 3. Enrich top candidate with ISRC from Deezer
+        if candidates and candidates[0].get("deezer_id"):
             try:
-                resp = requests.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 4}, timeout=4)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    tracks = data.get("data", [])
-                    for trk in tracks:
-                        dz_title = trk.get("title", "")
-                        dz_artist = trk.get("artist", {}).get("name", "")
-                        sim_title = _similarity(clean_tit, dz_title)
-                        sim_artist = max(_similarity(clean_art, dz_artist), _similarity(primary_art, dz_artist))
-                        
-                        if (sim_title > 0.55 and sim_artist > 0.45) or (primary_art.lower() in dz_artist.lower() and sim_title > 0.5):
-                            dz_id = trk.get("id")
-                            if dz_id:
-                                result["deezer_id"] = dz_id
-                                result["artist"] = dz_artist
-                                result["title"] = dz_title
-                                result["duration_ms"] = int(trk.get("duration", 0) * 1000)
-                                # Fetch full track metadata for ISRC
-                                t_resp = requests.get(f"{DEEZER_TRACK_URL}/{dz_id}", timeout=4)
-                                if t_resp.status_code == 200:
-                                    t_data = t_resp.json()
-                                    isrc = t_data.get("isrc")
-                                    if isrc:
-                                        result["isrc"] = isrc
-                                        result["artwork_url"] = t_data.get("album", {}).get("cover_big") or trk.get("album", {}).get("cover_medium", "")
-                                        result["preview_url"] = t_data.get("preview", "")
-                                        _ISRC_CACHE[cache_key] = isrc
-                                        return result
+                dz_id = candidates[0]["deezer_id"]
+                t_resp = requests.get(f"{DEEZER_TRACK_URL}/{dz_id}", timeout=3)
+                if t_resp.status_code == 200:
+                    isrc = t_resp.json().get("isrc")
+                    if isrc:
+                        candidates[0]["isrc"] = isrc
             except Exception:
                 pass
 
-        # 2. Query iTunes Search API (fallback for ISRC/artwork/preview)
-        itunes_queries = [f"{clean_art} {clean_tit}".strip()]
-        if primary_art and primary_art != clean_art:
-            itunes_queries.append(f"{primary_art} {clean_tit}".strip())
-
-        for q in itunes_queries:
-            try:
-                resp = requests.get(ITUNES_SEARCH_URL, params={"term": q, "entity": "song", "limit": 3}, timeout=4)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    results = data.get("results", [])
-                    if results:
-                        top = results[0]
-                        result["itunes_url"] = top.get("trackViewUrl")
-                        if not result["artist"]:
-                            result["artist"] = top.get("artistName", clean_art)
-                        if not result["title"]:
-                            result["title"] = top.get("trackName", clean_tit)
-                        if not result["duration_ms"]:
-                            result["duration_ms"] = int(top.get("trackTimeMillis", 0))
-                        if not result["artwork_url"]:
-                            art = top.get("artworkUrl100", "")
-                            result["artwork_url"] = art.replace("100x100bb.jpg", "600x600bb.jpg") if art else ""
-                        if not result["preview_url"]:
-                            result["preview_url"] = top.get("previewUrl", "")
-                        break
-            except Exception:
-                pass
-
-        _ISRC_CACHE[cache_key] = result.get("isrc")
-        return result
+        _CANDIDATES_CACHE[cache_key] = candidates[:8]
+        return candidates[:8]
 
     @classmethod
     def resolve_cross_platform_links(cls, track_url: str) -> Dict[str, str]:
-        """
-        Queries Songlink to get direct links for Spotify, Tidal, YouTube Music.
-        """
         if not track_url:
             return {}
 
@@ -159,7 +188,7 @@ class SmartResolver:
 
         links: Dict[str, str] = {}
         try:
-            resp = requests.get(SONGLINK_API_URL, params={"url": track_url, "userCountry": "US"}, timeout=5)
+            resp = requests.get(SONGLINK_API_URL, params={"url": track_url, "userCountry": "US"}, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 by_plat = data.get("linksByPlatform", {})

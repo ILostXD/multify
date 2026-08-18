@@ -25,10 +25,7 @@ from flask import Flask, request, session, redirect, jsonify, render_template, s
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 
-try:
-    from mutagen import File as MutagenFile
-except ImportError:
-    MutagenFile = None
+# Mutagen removed: all playlist parsing is file/text-based
 
 from providers.registry import PROVIDERS, get_provider
 import tidalapi
@@ -504,18 +501,6 @@ def parse_m3u8(content: str):
 def extract_metadata_from_path(path: str):
     if not path:
         return {"artist": "", "title": "", "album": ""}
-
-    if os.path.isfile(path) and MutagenFile:
-        try:
-            f = MutagenFile(path, easy=True)
-            if f:
-                artist = (f.get("artist") or [""])[0]
-                title = (f.get("title") or [""])[0]
-                album = (f.get("album") or [""])[0]
-                if artist or title:
-                    return {"artist": artist, "title": title, "album": album}
-        except Exception:
-            pass
 
     normalized = path.replace("\\", "/").strip()
     parts = [p for p in normalized.split("/") if p]

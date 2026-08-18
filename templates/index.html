@@ -935,6 +935,13 @@
       box-shadow: var(--glass-specular);
       transition: box-shadow 0.2s ease, border-color 0.2s ease;
     }
+    .settings-panel-card {
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 14px;
+      box-shadow: var(--glass-specular);
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
 
     .settings-input-wrapper:focus-within {
       border-color: var(--primary);
@@ -2524,7 +2531,7 @@
 
                 {settingsTab === 'tidal' && (
                   <div>
-                    <div className="liquid-glass" style={{ padding: '1.15rem', borderRadius: 14, marginBottom: '1.25rem' }}>
+                    <div className="settings-panel-card" style={{ padding: '1.15rem', marginBottom: '1.25rem' }}>
                       <h4 style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '0.35rem' }}>Tidal Device Authorization</h4>
                       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1rem' }}>
                         Click below to generate a Tidal device login link. Once you approve it in Tidal, click "Verify Connection".
@@ -2572,7 +2579,7 @@
 
                 {settingsTab === 'security' && (
                   <div>
-                    <div className="liquid-glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.95rem 1.15rem', borderRadius: 14, marginBottom: '1.25rem' }}>
+                    <div className="settings-panel-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.95rem 1.15rem', marginBottom: '1.25rem' }}>
                       <div>
                         <div style={{ fontSize: '0.88rem', fontWeight: 800 }}>Protection Status</div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -2642,9 +2649,8 @@
                               onClick={() => setShowRemoveConfirm(true)}
                               disabled={isSavingSettings}
                               className="glass-btn glass-btn-danger"
-                              style={{ padding: '0.4rem 0.85rem', fontSize: '0.78rem' }}
                             >
-                              <Icon name="stop-circle" size={14} />
+                              <Icon name="stop-circle" size={15} />
                               <span>Remove Password</span>
                             </button>
                           ) : <div></div>}
@@ -2726,7 +2732,6 @@
                           onClick={() => setShowRemoveConfirm(false)}
                           disabled={isSavingSettings}
                           className="glass-btn"
-                          style={{ padding: '0.5rem 1rem', fontSize: '0.82rem' }}
                         >
                           <span>Cancel</span>
                         </button>
@@ -2738,9 +2743,8 @@
                           }}
                           disabled={isSavingSettings}
                           className="glass-btn glass-btn-danger"
-                          style={{ padding: '0.5rem 1.15rem', fontSize: '0.82rem', fontWeight: 700 }}
                         >
-                          <Icon name={isSavingSettings ? 'loader' : 'stop-circle'} size={14} />
+                          <Icon name={isSavingSettings ? 'loader' : 'stop-circle'} size={15} />
                           <span>Remove Password</span>
                         </button>
                       </div>

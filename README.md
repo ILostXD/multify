@@ -17,13 +17,9 @@
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg?style=flat" alt="GPL-3.0 License" />
 </p>
 
----
-
 ## Overview
 
 **Multify** is a high-performance, privacy-first playlist converter designed to import local music library playlists (`.m3u8` / `.m3u`) into your favorite cloud streaming services. With intelligent track metadata matching, studio album prioritization, guest search modes, and a stunning liquid glass interface, Multify makes migrating and synchronizing playlists effortless.
-
----
 
 ## Screenshots & Interface
 
@@ -34,8 +30,6 @@ Select your target streaming service with dedicated glowing hero cards and direc
   <img src="assets/LandingPage.png" alt="Multify Landing Page" width="800" />
 </p>
 
----
-
 ### 2. Intelligent Matcher & Track Review
 Live status badges, album art previews, and dropdown candidate selector with manual override and skip options.
 
@@ -43,16 +37,12 @@ Live status badges, album art previews, and dropdown candidate selector with man
   <img src="assets/SongItem.png" alt="Track Match Review" width="800" />
 </p>
 
----
-
 ### 3. Provider Settings & Credentials
 Tabbed credential management for Spotify OAuth, YouTube Music session headers, and Tidal device authorization.
 
 <p align="center">
   <img src="assets/Settings.png" alt="Streaming Provider Settings" width="800" />
 </p>
-
----
 
 ## Key Features
 
@@ -64,8 +54,6 @@ Tabbed credential management for Spotify OAuth, YouTube Music session headers, a
 - **Fluid Liquid Glass Interface**: High-contrast dark and light modes, reactive ambient orbs, and a floating action dock.
 - **Local & Secure**: All credentials, session tokens, and cache files stay 100% local on your machine.
 
----
-
 ## Supported Input Playlists
 
 Multify parses standard and extended `.m3u` / `.m3u8` playlist files exported from:
@@ -74,8 +62,6 @@ Multify parses standard and extended `.m3u` / `.m3u8` playlist files exported fr
 - **Plex / Jellyfin**
 - **VLC / Foobar2000 / Winamp**
 - Local file directories (automatic filename metadata fallback)
-
----
 
 ## Quick Start
 
@@ -102,8 +88,6 @@ docker run -d -p 5099:5099 --name multify multify
 
 Open **`http://127.0.0.1:5099`** in your browser.
 
----
-
 ### Option B: Local Python Installation
 
 If you prefer running directly on your host machine:
@@ -121,8 +105,6 @@ python app.py
 ```
 
 Navigate to **`http://127.0.0.1:5099`**.
-
----
 
 ## Streaming Provider Setup
 
@@ -144,8 +126,6 @@ Navigate to **`http://127.0.0.1:5099`**.
 2. Click the authorization link to approve the device login on Tidal.
 3. Click **Verify Connection** to store the session.
 
----
-
 ## Project Structure
 
 ```
@@ -165,13 +145,9 @@ multify/
     └── tidal_provider.py       # Tidal device auth & playlist creation
 ```
 
----
-
 ## AI Assistance & Development
 
 This codebase was designed and developed with **AI pair-programming assistance** using **Google Antigravity**, adhering to clean architectural patterns, provider abstraction layers, and modern UI/UX design standards.
-
----
 
 ## License
 

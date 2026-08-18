@@ -4,6 +4,7 @@ import time
 import requests
 from typing import List, Dict, Any, Optional, Tuple
 from providers import BaseProvider
+from resolvers.smart_resolver import SmartResolver, _clean_string
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -71,19 +72,65 @@ class SpotifyProvider(BaseProvider):
         results = []
         seen_ids = set()
 
-        clean_title = re.sub(r"\s*[\(\[\{][^\)\]\}]*[\)\]\}]\s*", " ", title).strip() or title
-        clean_artist = re.sub(r"\s*[\(\[\{][^\)\]\}]*[\)\]\}]\s*", " ", artist).strip() or artist
-        clean_album = re.sub(r"\s*[\(\[\{][^\)\]\}]*[\)\]\}]\s*", " ", album).strip() if album else ""
+        clean_title = _clean_string(title) or title
+        clean_artist = _clean_string(artist) or artist
+        clean_album = _clean_string(album) if album else ""
 
-        # Strategy 1: Plain relevance query (invokes Spotify's official popularity algorithm)
-        if clean_artist and clean_title:
+        # ── Tier 1: Smart Open Catalog & ISRC Resolution ─────────────────────
+        try:
+            meta = SmartResolver.get_isrc_and_metadata(clean_artist, clean_title, clean_album)
+            isrc = meta.get("isrc")
+            if isrc:
+                isrc_hits, retry = self._spotify_search(f"isrc:{isrc}", headers, seen_ids)
+                if retry:
+                    return [], retry
+                if isrc_hits:
+                    # Exact ISRC match found on Spotify!
+                    results += isrc_hits
+                    return results, None
+
+            # Check Songlink cross-platform bridge if Deezer ID was found
+            if meta.get("deezer_id"):
+                links = SmartResolver.resolve_cross_platform_links(f"https://www.deezer.com/track/{meta['deezer_id']}")
+                sp_id = links.get("spotify_id")
+                if sp_id and sp_id not in seen_ids:
+                    try:
+                        trk_resp = requests.get(f"{SPOTIFY_API_BASE}/tracks/{sp_id}", headers=headers, timeout=6)
+                        if trk_resp.status_code == 200:
+                            t = trk_resp.json()
+                            seen_ids.add(sp_id)
+                            album_info = t.get("album", {})
+                            images = album_info.get("images", [])
+                            art = images[0]["url"] if images else meta.get("artwork_url", "")
+                            album_artists_str = ", ".join(a["name"] for a in album_info.get("artists", []))
+                            results.append({
+                                "id": sp_id,
+                                "uri": t["uri"],
+                                "name": t["name"],
+                                "artists": ", ".join(a["name"] for a in t.get("artists", [])),
+                                "album": album_info.get("name", ""),
+                                "album_art": art,
+                                "album_type": album_info.get("album_type", "album"),
+                                "album_artists": album_artists_str,
+                                "popularity": t.get("popularity", 90),
+                                "duration_ms": t.get("duration_ms", 0),
+                                "preview_url": t.get("preview_url") or meta.get("preview_url")
+                            })
+                            return results, None
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # ── Tier 2: Spotify Relevance Query (Single Shot) ────────────────────
+        if not results and clean_artist and clean_title:
             q1 = f"{clean_artist} {clean_title}".strip()
             hits, retry = self._spotify_search(q1, headers, seen_ids)
             if retry:
                 return [], retry
             results += hits
 
-        # Strategy 2: If album is known from file tags (ONLY executed as fallback if Strategy 1 yielded 0 results)
+        # ── Tier 3: Strict & Album Fallbacks (Only if 0 results) ─────────────
         if not results and clean_artist and clean_album and clean_title:
             q2 = f"{clean_artist} {clean_album} {clean_title}".strip()
             hits, retry = self._spotify_search(q2, headers, seen_ids)
@@ -91,7 +138,6 @@ class SpotifyProvider(BaseProvider):
                 return [], retry
             results += hits
 
-        # Strategy 3: Strict track & artist search (ONLY executed as fallback if still 0 results)
         if not results and clean_artist and clean_title:
             q3 = f'track:"{clean_title}" artist:"{clean_artist}"'
             hits, retry = self._spotify_search(q3, headers, seen_ids)
@@ -99,7 +145,7 @@ class SpotifyProvider(BaseProvider):
                 return [], retry
             results += hits
         elif not results and clean_title:
-            hits, retry = self._spotify_search(title.strip(), headers, seen_ids)
+            hits, retry = self._spotify_search(clean_title, headers, seen_ids)
             if retry:
                 return [], retry
             results += hits

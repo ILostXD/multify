@@ -1,0 +1,10 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.agents
+graphify-out
+config.json
+data/
+temp*

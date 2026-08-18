@@ -18,7 +18,6 @@ class SpotifyProvider(BaseProvider):
     icon = "disc"
 
     def _get_fresh_token(self, config: Dict[str, Any], session_data: Dict[str, Any]) -> Optional[str]:
-        """Return a valid, non-expired access token, automatically refreshing if needed."""
         token = session_data.get("access_token") or config.get("spotify_access_token")
         expires_at = session_data.get("token_expires_at") or config.get("spotify_token_expires_at", 0)
         refresh_token = session_data.get("refresh_token") or config.get("spotify_refresh_token")
@@ -76,34 +75,36 @@ class SpotifyProvider(BaseProvider):
         # If Spotify is authenticated, attempt fast precision lookup on Spotify
         rate_limit_hit = False
         if headers:
-            # Check ISRC on top candidate
             top_isrc = open_candidates[0].get("isrc") if open_candidates else None
             if top_isrc:
                 isrc_hits, retry = self._spotify_search(f"isrc:{top_isrc}", headers, seen_ids)
                 if isrc_hits:
+                    for h in isrc_hits:
+                        h["match_badge"] = "Exact Match"
+                        h["match_score"] = 100
                     results += isrc_hits
                 elif retry:
                     rate_limit_hit = True
 
-            # If no ISRC hits and not rate limited, try single relevance query
             if not results and not rate_limit_hit:
                 art_vars = extract_artist_variations(artist)
                 tit_vars = extract_title_variations(title)
                 q = f"{art_vars[0]} {tit_vars[0]}".strip()
                 hits, retry = self._spotify_search(q, headers, seen_ids)
                 if hits:
+                    for h in hits:
+                        h["match_badge"] = "Studio Track"
                     results += hits
                 elif retry:
                     rate_limit_hit = True
 
-        # 2. Integrate and format open candidates (providing multiple dropdown options)
+        # 2. Integrate and format open candidates with badges
         for c in open_candidates:
             cid = c.get("id") or str(c.get("raw_id"))
             if cid in seen_ids:
                 continue
             seen_ids.add(cid)
             
-            # Ensure every candidate has a distinct, valid URI for React dropdown selection
             uri_val = c.get("uri")
             if not uri_val:
                 if c.get("isrc"):
@@ -124,7 +125,9 @@ class SpotifyProvider(BaseProvider):
                 "album_artists": c.get("album_artists", artist),
                 "popularity": c.get("popularity", 75),
                 "duration_ms": c.get("duration_ms", 0),
-                "preview_url": c.get("preview_url", "")
+                "preview_url": c.get("preview_url", ""),
+                "match_badge": c.get("match_badge", "Match"),
+                "match_score": c.get("match_score", 80)
             })
 
         if not results:
@@ -180,13 +183,11 @@ class SpotifyProvider(BaseProvider):
         if not headers:
             return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
-        # Resolve URIs (handling 22-char Spotify IDs, episodes, and ISRC/open resolutions)
         resolved_uris = []
         for u in track_uris:
             if not u or not isinstance(u, str):
                 continue
             u = u.strip()
-            # Standard Spotify URI: "spotify:track:..." (36 chars) or "spotify:episode:..."
             if (u.startswith("spotify:track:") and len(u) == 36 and "_" not in u) or u.startswith("spotify:episode:"):
                 resolved_uris.append(u)
             elif u.startswith("spotify:track:") or u.startswith("isrc:"):
@@ -204,7 +205,6 @@ class SpotifyProvider(BaseProvider):
         if not resolved_uris:
             return {"success": False, "error": "No valid Spotify track matches found to add to playlist."}
 
-        # 1. Create Playlist using /me/playlists (modern endpoint)
         payloads_to_try = [
             {"name": name, "public": False, "description": "Imported via Multify"},
             {"name": name, "public": True, "description": "Imported via Multify"},
@@ -222,7 +222,6 @@ class SpotifyProvider(BaseProvider):
             if create_resp.status_code in (200, 201):
                 break
 
-        # Fallback to /users/{user_id}/playlists if /me failed
         if not create_resp or create_resp.status_code not in (200, 201):
             me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=10)
             if me_resp.status_code == 200:
@@ -266,21 +265,16 @@ class SpotifyProvider(BaseProvider):
         playlist_id = pdata.get("id")
         playlist_url = pdata.get("external_urls", {}).get("spotify", "")
 
-        # 2. Add tracks in batches of 100 using /items endpoint with fallback to /tracks
         total_added = 0
         batch_size = 100
         for i in range(0, len(resolved_uris), batch_size):
             batch = resolved_uris[i:i + batch_size]
-            
-            # Try /items endpoint first (2026 modern spec)
             add_resp = requests.post(
                 f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
                 headers={**headers, "Content-Type": "application/json"},
                 json={"uris": batch},
                 timeout=15
             )
-            
-            # Fallback to /tracks endpoint if /items is not supported on older API proxy
             if add_resp.status_code not in (200, 201):
                 add_resp = requests.post(
                     f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",

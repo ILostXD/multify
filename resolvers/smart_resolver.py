@@ -1,18 +1,17 @@
 import re
+import time
 import unicodedata
 import requests
 from requests.adapters import HTTPAdapter
-import concurrent.futures
 from typing import Dict, Any, Optional, Tuple, List
 from difflib import SequenceMatcher
 
 DEEZER_SEARCH_URL = "https://api.deezer.com/search"
 DEEZER_TRACK_URL = "https://api.deezer.com/track"
-ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 SONGLINK_API_URL = "https://api.song.link/v1-alpha.1/links"
 
 _HTTP = requests.Session()
-_adapter = HTTPAdapter(pool_connections=40, pool_maxsize=40, max_retries=2)
+_adapter = HTTPAdapter(pool_connections=25, pool_maxsize=25, max_retries=2)
 _HTTP.mount("https://", _adapter)
 _HTTP.mount("http://", _adapter)
 
@@ -31,15 +30,10 @@ PENALTY_KEYWORDS = [
 def _normalize_text(s: str) -> str:
     if not s:
         return ""
-    # Unicode NFKD normalization (converts Ÿ -> Y, é -> e, etc.)
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
-    
-    # Strip file extensions & leading track numbers
     s = re.sub(r"\.(mp3|flac|m4a|wav|aac|ogg|opus|alac)$", "", s, flags=re.IGNORECASE)
     s = re.sub(r"^\d+[\s\.\-_]+", "", s)
-    
-    # Strip common noise tags
     s = re.sub(r"\s*[\(\[\{](?:official|audio|video|remaster|remastered|explicit|deluxe|version|edit|bonus|single|album|extended|mix)[^\)\]\}]*[\)\]\}]\s*", " ", s, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", s).strip()
 
@@ -80,10 +74,20 @@ def extract_title_variations(title: str) -> List[str]:
     if norm and norm not in variations:
         variations.append(norm)
 
-    leet = re.sub(r"\$", "s", norm, flags=re.IGNORECASE)
-    if leet and leet not in variations:
-        variations.append(leet)
+    # Leetspeak: Ca$ino -> Casino, BACKROOMS -> BACKR00MS
+    leet_s = re.sub(r"\$", "s", norm, flags=re.IGNORECASE)
+    if leet_s and leet_s not in variations:
+        variations.append(leet_s)
 
+    leet_00 = re.sub(r"oo", "00", norm, flags=re.IGNORECASE)
+    if leet_00 and leet_00 not in variations:
+        variations.append(leet_00)
+
+    leet_oo = re.sub(r"00", "oo", norm, flags=re.IGNORECASE)
+    if leet_oo and leet_oo not in variations:
+        variations.append(leet_oo)
+
+    # Strip (feat. ...)
     t_no_feat = re.sub(r"\s*[\(\[\{](?:feat|ft|with|featuring)[^\)\]\}]*[\)\]\}]\s*", " ", norm, flags=re.IGNORECASE).strip()
     t_no_feat = re.sub(r"\s+(?:feat|ft|with)\.?\s+.*$", "", t_no_feat, flags=re.IGNORECASE).strip()
     if t_no_feat and t_no_feat not in variations:
@@ -134,13 +138,16 @@ def score_candidate(cand: Dict[str, Any], target_artist: str, target_title: str,
     # 2. Title Matching (0 - 40 pts)
     title_exact = False
     if t_tit and c_tit:
-        if t_tit == c_tit:
+        # Check leetspeak normalized titles (e.g. backrooms vs backr00ms)
+        t_tit_norm = t_tit.replace("00", "oo").replace("$", "s")
+        c_tit_norm = c_tit.replace("00", "oo").replace("$", "s")
+        if t_tit == c_tit or t_tit_norm == c_tit_norm:
             score += 40.0
             title_exact = True
-        elif c_tit.startswith(t_tit) or t_tit.startswith(c_tit):
+        elif c_tit.startswith(t_tit) or t_tit.startswith(c_tit) or c_tit_norm.startswith(t_tit_norm):
             score += 32.0
         else:
-            ratio = SequenceMatcher(None, t_tit, c_tit).ratio()
+            ratio = SequenceMatcher(None, t_tit_norm, c_tit_norm).ratio()
             score += ratio * 30.0
 
     # 3. Album Matching (0 - 15 pts)
@@ -187,9 +194,32 @@ def score_candidate(cand: Dict[str, Any], target_artist: str, target_title: str,
     return score, badge
 
 
+def _safe_fetch_deezer(q: str, retries: int = 2) -> List[Dict[str, Any]]:
+    for attempt in range(retries + 1):
+        try:
+            resp = _HTTP.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 6}, timeout=4.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                if "error" in data:
+                    err_code = data["error"].get("code", 0)
+                    if err_code == 4 and attempt < retries:
+                        time.sleep(0.35)
+                        continue
+                    return []
+                return data.get("data", [])
+            elif resp.status_code == 429 and attempt < retries:
+                time.sleep(0.35)
+                continue
+        except Exception:
+            if attempt < retries:
+                time.sleep(0.2)
+                continue
+    return []
+
+
 class SmartResolver:
     """
-    Unified Multi-Engine Open Catalog Resolver with Composite Scoring & Match Badging.
+    Intelligent Adaptive Multi-Tier Open Catalog Resolver with Quota Protection & Scoring.
     """
 
     @classmethod
@@ -204,55 +234,21 @@ class SmartResolver:
         seen_ids = set()
         raw_candidates: List[Dict[str, Any]] = []
 
-        def fetch_deezer(q: str):
-            try:
-                resp = _HTTP.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 6}, timeout=4.5)
-                if resp.status_code == 200:
-                    return resp.json().get("data", [])
-            except Exception:
-                pass
-            return []
+        # 1. First attempt: Primary query (resolves 90% of tracks without burning API quota)
+        primary_q = f"{art_vars[0]} {tit_vars[0]}".strip()
+        dz_results = _safe_fetch_deezer(primary_q)
 
-        def fetch_itunes(q: str):
-            try:
-                headers = {"User-Agent": "Mozilla/5.0"}
-                resp = _HTTP.get(ITUNES_SEARCH_URL, headers=headers, params={"term": q, "entity": "song", "limit": 4}, timeout=3.5)
-                if resp.status_code == 200:
-                    return resp.json().get("results", [])
-            except Exception:
-                pass
-            return []
+        # 2. Second attempt: Precision query if 0 results
+        if not dz_results and len(art_vars) > 0 and len(tit_vars) > 0:
+            prec_q = f'artist:"{art_vars[0]}" track:"{tit_vars[0]}"'
+            dz_results = _safe_fetch_deezer(prec_q)
 
-        # Generate top query combinations
-        queries_to_try = []
-        if art_vars and tit_vars:
-            queries_to_try.append(f'artist:"{art_vars[0]}" track:"{tit_vars[0]}"')
-            for a in art_vars[:2]:
-                for t in tit_vars[:2]:
-                    q = f"{a} {t}".strip()
-                    if q and q not in queries_to_try:
-                        queries_to_try.append(q)
-            if tit_vars[0] not in queries_to_try:
-                queries_to_try.append(tit_vars[0])
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            dz_futures = [executor.submit(fetch_deezer, q) for q in queries_to_try[:5]]
-            it_futures = [executor.submit(fetch_itunes, q) for q in queries_to_try[:2]]
-
-            dz_results = []
-            for f in dz_futures:
-                dz_results.extend(f.result())
-
-            it_results = []
-            for f in it_futures:
-                it_results.extend(f.result())
-
-        # Fallback if 0 results
-        if not dz_results and not it_results:
-            raw_q = f"{artist} {title}".strip()
-            dz_results = fetch_deezer(raw_q)
-            if not dz_results and title:
-                dz_results = fetch_deezer(title)
+        # 3. Third attempt: Pure title query or secondary variation if still 0 results
+        if not dz_results and len(tit_vars) > 1:
+            alt_q = f"{art_vars[0]} {tit_vars[1]}".strip()
+            dz_results = _safe_fetch_deezer(alt_q)
+        if not dz_results and tit_vars:
+            dz_results = _safe_fetch_deezer(tit_vars[0])
 
         # Process Deezer items
         for trk in dz_results:
@@ -275,31 +271,6 @@ class SmartResolver:
                 "duration_ms": int(trk.get("duration", 0) * 1000),
                 "preview_url": trk.get("preview", ""),
                 "deezer_id": trk.get("id"),
-                "isrc": None
-            })
-
-        # Process iTunes items
-        for trk in it_results:
-            tid = f"itunes_{trk.get('trackId')}"
-            if tid in seen_ids:
-                continue
-            seen_ids.add(tid)
-            art = trk.get("artworkUrl100", "")
-            art_hi = art.replace("100x100bb.jpg", "600x600bb.jpg") if art else ""
-            raw_candidates.append({
-                "id": tid,
-                "raw_id": trk.get("trackId"),
-                "source": "itunes",
-                "name": trk.get("trackName", ""),
-                "artists": trk.get("artistName", ""),
-                "album": trk.get("collectionName", ""),
-                "album_art": art_hi,
-                "album_type": "album",
-                "album_artists": trk.get("artistName", ""),
-                "popularity": 80,
-                "duration_ms": int(trk.get("trackTimeMillis", 0)),
-                "preview_url": trk.get("previewUrl", ""),
-                "itunes_url": trk.get("trackViewUrl", ""),
                 "isrc": None
             })
 

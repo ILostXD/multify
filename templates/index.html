@@ -1300,7 +1300,7 @@
       return titleConfident && (artistConfident || titleExact);
     }
 
-    const SEARCH_DELAY_MS = 40;
+    const SEARCH_DELAY_MS = 60;
     const delay = ms => new Promise(r => setTimeout(r, ms));
 
     /* ── High-Performance Memoized Track Row ── */
@@ -1753,11 +1753,11 @@
         stopSearchRef.current = false;
         setSearchProgress({ current: 0, total: trackList.length });
 
-        const CONCURRENCY = 4;
+        const CONCURRENCY = 2;
         let nextIdx = 0;
         let completed = 0;
 
-        const processTrack = async (i) => {
+        const processTrack = async (i, isRetry = false) => {
           if (stopSearchRef.current || i >= trackList.length) return;
           const t = trackList[i];
 
@@ -1780,11 +1780,17 @@
               setRateLimits(prev => ({ ...prev, [provider]: wait }));
               await delay(wait * 1000);
               setRateLimits(prev => ({ ...prev, [provider]: null }));
-              return processTrack(i);
+              return processTrack(i, isRetry);
             }
 
             const data = await resp.json();
             const candidates = data.results || [];
+
+            // Auto-retry once on empty result to guard against transient API burst limits
+            if (candidates.length === 0 && !isRetry) {
+              await delay(350);
+              return processTrack(i, true);
+            }
 
             setTracks(prev => {
               const next = [...prev];
@@ -1812,6 +1818,10 @@
               return next;
             });
           } catch (e) {
+            if (!isRetry) {
+              await delay(350);
+              return processTrack(i, true);
+            }
             setTracks(prev => {
               const next = [...prev];
               const cur = next[i];
@@ -1830,8 +1840,10 @@
               return next;
             });
           } finally {
-            completed++;
-            setSearchProgress({ current: completed, total: trackList.length });
+            if (!isRetry) {
+              completed++;
+              setSearchProgress({ current: completed, total: trackList.length });
+            }
           }
         };
 

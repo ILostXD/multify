@@ -1,5 +1,5 @@
-import unicodedata
 import re
+import unicodedata
 import requests
 from requests.adapters import HTTPAdapter
 import concurrent.futures
@@ -8,17 +8,23 @@ from difflib import SequenceMatcher
 
 DEEZER_SEARCH_URL = "https://api.deezer.com/search"
 DEEZER_TRACK_URL = "https://api.deezer.com/track"
-ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 SONGLINK_API_URL = "https://api.song.link/v1-alpha.1/links"
 
 _HTTP = requests.Session()
-_adapter = HTTPAdapter(pool_connections=30, pool_maxsize=30, max_retries=1)
+_adapter = HTTPAdapter(pool_connections=35, pool_maxsize=35, max_retries=2)
 _HTTP.mount("https://", _adapter)
 _HTTP.mount("http://", _adapter)
 
 _ISRC_CACHE: Dict[str, Optional[str]] = {}
 _SONGLINK_CACHE: Dict[str, Dict[str, Any]] = {}
 _CANDIDATES_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+
+PENALTY_KEYWORDS = [
+    "tribute", "karaoke", "instrumental", "cover", "slowed", "sped up", "speed up",
+    "remix", "orchestral", "lullaby", "babies go", "female version", "male version",
+    "piano version", "violin", "acoustic version", "parody", "in the style of",
+    "originally performed"
+]
 
 
 def _normalize_text(s: str) -> str:
@@ -46,12 +52,13 @@ def extract_artist_variations(artist: str) -> List[str]:
     if norm and norm not in variations:
         variations.append(norm)
 
-    # Leetspeak / symbol normalization: A$AP -> ASAP / Asap
+    # Symbol normalization: A$AP -> ASAP / Asap, J. Cole -> J Cole
     leet = re.sub(r"\$", "s", norm, flags=re.IGNORECASE)
-    leet_clean = re.sub(r"[\$\.]", "", norm)
-    for v in [leet, leet_clean]:
-        if v and v not in variations:
-            variations.append(v)
+    clean_punct = re.sub(r"[\$\.]", "", norm)
+    for v in [leet, clean_punct]:
+        v_s = v.strip()
+        if v_s and v_s not in variations:
+            variations.append(v_s)
 
     # Split delimiters
     parts = re.split(r"\s*(?:[•/;,]|(?:\s+&\s+)|\s+(?:feat|ft|vs|with)\.?\s+)\s*", norm, flags=re.IGNORECASE)
@@ -59,10 +66,9 @@ def extract_artist_variations(artist: str) -> List[str]:
         p_c = p.strip()
         if p_c and p_c not in variations:
             variations.append(p_c)
-        # Also add leetspeak variation of sub-artist (e.g. A$AP Rocky -> ASAP Rocky)
-        p_leet = re.sub(r"\$", "s", p_c, flags=re.IGNORECASE)
-        if p_leet and p_leet not in variations:
-            variations.append(p_leet)
+        p_clean = re.sub(r"[\$\.]", "", p_c).strip()
+        if p_clean and p_clean not in variations:
+            variations.append(p_clean)
 
     return variations
 
@@ -97,9 +103,65 @@ def extract_title_variations(title: str) -> List[str]:
     return variations
 
 
+def score_candidate(cand: Dict[str, Any], target_artist: str, target_title: str, target_album: str = "") -> float:
+    t_art = _normalize_text(target_artist).lower()
+    t_tit = _normalize_text(target_title).lower()
+    t_alb = _normalize_text(target_album).lower()
+
+    c_art = _normalize_text(cand.get("artists", "")).lower()
+    c_tit = _normalize_text(cand.get("name", "")).lower()
+    c_alb = _normalize_text(cand.get("album", "")).lower()
+    c_full_title = cand.get("name", "").lower()
+
+    score = 0.0
+
+    # 1. Artist Matching (0 - 50 pts)
+    if t_art and c_art:
+        if t_art == c_art:
+            score += 50.0
+        elif t_art in c_art or c_art in t_art:
+            score += 42.0
+        else:
+            # Check sub-artists in multi-artist strings
+            sub_artists = [_normalize_text(a).lower() for a in re.split(r"[•/;,]|\s+&\s+|\s+(?:feat|ft|vs|with)\.?\s+", target_artist, flags=re.IGNORECASE) if a.strip()]
+            if any(sa and (sa in c_art or c_art in sa) for sa in sub_artists):
+                score += 40.0
+            else:
+                score += 0.0
+    elif not t_art:
+        score += 25.0
+
+    # 2. Title Matching (0 - 40 pts)
+    if t_tit and c_tit:
+        if t_tit == c_tit:
+            score += 40.0
+        elif c_tit.startswith(t_tit) or t_tit.startswith(c_tit):
+            score += 32.0
+        else:
+            ratio = SequenceMatcher(None, t_tit, c_tit).ratio()
+            score += ratio * 30.0
+
+    # 3. Album Matching (0 - 15 pts)
+    if t_alb and c_alb:
+        if t_alb == c_alb or t_alb in c_alb or c_alb in t_alb:
+            score += 15.0
+
+    # 4. Penalty for Covers / Tributes / Karaoke if not in original title
+    t_raw_lower = target_title.lower()
+    for kw in PENALTY_KEYWORDS:
+        if kw in c_full_title and kw not in t_raw_lower:
+            score -= 40.0
+
+    # 5. Popularity boost (0 - 5 pts)
+    pop = cand.get("popularity", 0)
+    score += (pop / 100.0) * 5.0
+
+    return score
+
+
 class SmartResolver:
     """
-    Intelligent Adaptive Multi-Tier Open Catalog Resolver.
+    Intelligent Adaptive Multi-Tier Open Catalog Resolver with High-Precision Scoring.
     """
 
     @classmethod
@@ -112,49 +174,47 @@ class SmartResolver:
         tit_vars = extract_title_variations(title)
         
         seen_ids = set()
-        candidates: List[Dict[str, Any]] = []
+        raw_candidates: List[Dict[str, Any]] = []
 
         def fetch_deezer(q: str):
             try:
-                resp = _HTTP.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 4}, timeout=3)
+                resp = _HTTP.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 6}, timeout=4.5)
                 if resp.status_code == 200:
                     return resp.json().get("data", [])
             except Exception:
                 pass
             return []
 
-        def fetch_itunes(q: str):
-            try:
-                resp = _HTTP.get(ITUNES_SEARCH_URL, params={"term": q, "entity": "song", "limit": 3}, timeout=3)
-                if resp.status_code == 200:
-                    return resp.json().get("results", [])
-            except Exception:
-                pass
-            return []
-
-        # Generate top query pairs
+        # Generate top query combinations: Precision, Relevance, Title-only, and Inverted
         queries_to_try = []
-        for a in art_vars[:2]:
-            for t in tit_vars[:2]:
-                q = f"{a} {t}".strip()
-                if q and q not in queries_to_try:
-                    queries_to_try.append(q)
+        if art_vars and tit_vars:
+            # 1. Precision filter: artist:"..." track:"..."
+            p_q = f'artist:"{art_vars[0]}" track:"{tit_vars[0]}"'
+            queries_to_try.append(p_q)
+            
+            # 2. General queries
+            for a in art_vars[:2]:
+                for t in tit_vars[:2]:
+                    q = f"{a} {t}".strip()
+                    if q and q not in queries_to_try:
+                        queries_to_try.append(q)
+            
+            # 3. Pure title query (finds top tracks like ASTROTHUNDER, Softcore)
+            if tit_vars[0] not in queries_to_try:
+                queries_to_try.append(tit_vars[0])
 
-        # Also add pure title if artist is long
-        if tit_vars and len(queries_to_try) < 4:
-            queries_to_try.append(tit_vars[0])
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            dz_futures = [executor.submit(fetch_deezer, q) for q in queries_to_try[:3]]
-            it_futures = [executor.submit(fetch_itunes, q) for q in queries_to_try[:2]]
-
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            dz_futures = [executor.submit(fetch_deezer, q) for q in queries_to_try[:5]]
             dz_results = []
             for f in dz_futures:
                 dz_results.extend(f.result())
 
-            it_results = []
-            for f in it_futures:
-                it_results.extend(f.result())
+        # Fallback if 0 results
+        if not dz_results:
+            raw_q = f"{artist} {title}".strip()
+            dz_results = fetch_deezer(raw_q)
+            if not dz_results and title:
+                dz_results = fetch_deezer(title)
 
         # Process Deezer items
         for trk in dz_results:
@@ -163,7 +223,7 @@ class SmartResolver:
                 continue
             seen_ids.add(tid)
             album_info = trk.get("album", {})
-            candidates.append({
+            raw_candidates.append({
                 "id": tid,
                 "raw_id": trk.get("id"),
                 "source": "deezer",
@@ -180,45 +240,32 @@ class SmartResolver:
                 "isrc": None
             })
 
-        # Process iTunes items
-        for trk in it_results:
-            tid = f"itunes_{trk.get('trackId')}"
-            if tid in seen_ids:
-                continue
-            seen_ids.add(tid)
-            art = trk.get("artworkUrl100", "")
-            art_hi = art.replace("100x100bb.jpg", "600x600bb.jpg") if art else ""
-            candidates.append({
-                "id": tid,
-                "raw_id": trk.get("trackId"),
-                "source": "itunes",
-                "name": trk.get("trackName", ""),
-                "artists": trk.get("artistName", ""),
-                "album": trk.get("collectionName", ""),
-                "album_art": art_hi,
-                "album_type": "album",
-                "album_artists": trk.get("artistName", ""),
-                "popularity": 80,
-                "duration_ms": int(trk.get("trackTimeMillis", 0)),
-                "preview_url": trk.get("previewUrl", ""),
-                "itunes_url": trk.get("trackViewUrl", ""),
-                "isrc": None
-            })
+        # ── High-Precision Scoring & Ranking ──────────────────────────────────
+        scored_candidates = []
+        for c in raw_candidates:
+            c_score = score_candidate(c, artist, title, album)
+            c["match_score"] = c_score
+            scored_candidates.append((c_score, c))
+
+        # Sort descending by match score
+        scored_candidates.sort(key=lambda x: x[0], reverse=True)
+        ranked = [c for _, c in scored_candidates]
 
         # Fast ISRC extraction for top candidate
-        if candidates and candidates[0].get("deezer_id"):
+        if ranked and ranked[0].get("deezer_id"):
             try:
-                dz_id = candidates[0]["deezer_id"]
+                dz_id = ranked[0]["deezer_id"]
                 t_resp = _HTTP.get(f"{DEEZER_TRACK_URL}/{dz_id}", timeout=2.5)
                 if t_resp.status_code == 200:
                     isrc = t_resp.json().get("isrc")
                     if isrc:
-                        candidates[0]["isrc"] = isrc
+                        ranked[0]["isrc"] = isrc
             except Exception:
                 pass
 
-        _CANDIDATES_CACHE[cache_key] = candidates[:8]
-        return candidates[:8]
+        final_candidates = ranked[:8]
+        _CANDIDATES_CACHE[cache_key] = final_candidates
+        return final_candidates
 
     @classmethod
     def resolve_cross_platform_links(cls, track_url: str) -> Dict[str, str]:

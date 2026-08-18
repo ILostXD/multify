@@ -1281,8 +1281,7 @@
 
       let statusClass = '';
       if (pData.selectedUri && pData.selectedUri !== 'skip') {
-        const isConfident = isConfidentMatch(track.artist, track.title, selectedCandidate);
-        statusClass = isConfident ? 'status-matched' : 'status-review';
+        statusClass = 'status-matched';
       } else if (pData.selectedUri === 'skip') {
         statusClass = 'status-skipped';
       } else if (pData.searched) {
@@ -1678,7 +1677,10 @@
             const curProv = (cur.providers && cur.providers[provider]) || {};
             let chosen = curProv.selectedUri;
             if (!chosen && candidates.length > 0) {
-              chosen = candidates[0].uri || candidates[0].id;
+              const bestMatch = candidates.find(c => isConfidentMatch(cur.artist, cur.title, c));
+              if (bestMatch) {
+                chosen = bestMatch.uri || bestMatch.id;
+              }
             }
             next[index] = {
               ...cur,
@@ -1741,7 +1743,10 @@
               const curProv = (cur.providers && cur.providers[provider]) || {};
               let chosen = curProv.selectedUri;
               if (!chosen && candidates.length > 0) {
-                chosen = candidates[0].uri || candidates[0].id;
+                const bestMatch = candidates.find(c => isConfidentMatch(cur.artist, cur.title, c));
+                if (bestMatch) {
+                  chosen = bestMatch.uri || bestMatch.id;
+                }
               }
               next[i] = {
                 ...cur,

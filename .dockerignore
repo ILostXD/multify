@@ -7,4 +7,5 @@ __pycache__
 graphify-out
 config.json
 data/
-temp*
+temp_*
+*.tmp

@@ -23,6 +23,7 @@ from typing import Dict, Any
 import requests
 from flask import Flask, request, session, redirect, jsonify, render_template, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
     from mutagen import File as MutagenFile
@@ -84,6 +85,7 @@ def load_config() -> Dict[str, Any]:
         "tidal_access_token": "",
         "tidal_refresh_token": "",
         "tidal_expiry_time": "",
+        "password_hash": "",
     }
     cfg_file = get_config_file_path()
     if os.path.isfile(cfg_file):
@@ -110,6 +112,49 @@ def save_config(new_cfg: Dict[str, Any]) -> bool:
         app.logger.error(f"Failed to save config file ({get_config_file_path()}): {e}")
         return False
 
+
+def is_password_configured() -> bool:
+    """Return True if an access password is set via env var or config."""
+    if os.environ.get("MULTIFY_PASSWORD"):
+        return True
+    cfg = load_config()
+    return bool(cfg.get("password_hash"))
+
+
+def verify_app_password(password: str) -> bool:
+    """Verify submitted password against MULTIFY_PASSWORD env var or stored password_hash."""
+    env_pw = os.environ.get("MULTIFY_PASSWORD")
+    if env_pw:
+        return secrets.compare_digest(password, env_pw)
+    cfg = load_config()
+    stored_hash = cfg.get("password_hash")
+    if stored_hash:
+        return check_password_hash(stored_hash, password)
+    return False
+
+
+def is_app_locked() -> bool:
+    """Return True if password protection is enabled and the current session is not unlocked."""
+    if not is_password_configured():
+        return False
+    return not bool(session.get("auth_unlocked"))
+
+
+@app.before_request
+def gatekeeper():
+    """Enforce master password protection on all API and converter routes when locked."""
+    public_endpoints = {
+        "static", "serve_assets", "favicon", "index",
+        "auth_status", "auth_login", "auth_logout"
+    }
+    if request.endpoint in public_endpoints or (request.path and request.path.startswith("/assets/")) or request.path == "/favicon.ico":
+        return None
+
+    if is_app_locked():
+        if request.path.startswith("/api/") or request.path in ("/search", "/parse", "/create_playlist", "/export_missing"):
+            return jsonify({"error": "Authentication required", "locked": True}), 401
+        return redirect("/")
+
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API = "https://api.spotify.com/v1"
@@ -134,11 +179,49 @@ def favicon():
     )
 
 
+
+@app.route("/api/auth/status", methods=["GET"])
+def auth_status():
+    """Return whether password protection is active and if current session is unlocked."""
+    return jsonify({
+        "password_required": is_password_configured(),
+        "is_unlocked": bool(session.get("auth_unlocked")),
+        "is_env_password": bool(os.environ.get("MULTIFY_PASSWORD"))
+    })
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    """Unlock the app with master password."""
+    data = request.get_json() or {}
+    password = str(data.get("password", "")).strip()
+    if not password:
+        return jsonify({"error": "Password cannot be empty."}), 400
+
+    if verify_app_password(password):
+        session.permanent = True
+        session["auth_unlocked"] = True
+        return jsonify({"success": True, "message": "Unlocked successfully."})
+    return jsonify({"error": "Incorrect password. Please try again."}), 401
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    """Lock the app by clearing the unlocked session state."""
+    session.pop("auth_unlocked", None)
+    return jsonify({"success": True, "message": "Locked successfully."})
+
 @app.route("/")
 def index():
+    _refresh_spotify_token_if_needed()
     cfg = load_config()
     spotify_logged_in = bool(session.get("access_token"))
-    return render_template("index.html", logged_in=spotify_logged_in)
+    return render_template(
+        "index.html",
+        logged_in=spotify_logged_in,
+        password_required=is_password_configured(),
+        is_unlocked=bool(session.get("auth_unlocked"))
+    )
 
 
 @app.route("/api/providers/status", methods=["GET"])
@@ -159,6 +242,8 @@ def provider_status():
 
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
+    if is_app_locked():
+        return jsonify({"error": "Authentication required", "locked": True}), 401
     cfg = load_config()
     return jsonify({
         "spotify_client_id": cfg.get("spotify_client_id", ""),
@@ -167,14 +252,18 @@ def get_settings():
         "ytmusic_headers": cfg.get("ytmusic_headers", ""),
         "has_tidal": bool(cfg.get("tidal_access_token")),
         "is_configured": bool(cfg.get("spotify_client_id") and cfg.get("spotify_client_secret")),
+        "has_password": is_password_configured(),
+        "is_env_password": bool(os.environ.get("MULTIFY_PASSWORD")),
     })
 
 
 @app.route("/api/settings", methods=["POST"])
 def update_settings():
+    if is_app_locked():
+        return jsonify({"error": "Authentication required", "locked": True}), 401
     data = request.get_json() or {}
     new_cfg = {}
-    
+
     if "spotify_client_id" in data:
         new_cfg["spotify_client_id"] = str(data["spotify_client_id"]).strip()
     if "spotify_client_secret" in data:
@@ -183,6 +272,19 @@ def update_settings():
         new_cfg["spotify_redirect_uri"] = str(data["spotify_redirect_uri"]).strip()
     if "ytmusic_headers" in data:
         new_cfg["ytmusic_headers"] = str(data["ytmusic_headers"]).strip()
+
+    # Handle Master Password updates
+    if "new_password" in data:
+        new_pw = str(data["new_password"]).strip()
+        if new_pw:
+            new_cfg["password_hash"] = generate_password_hash(new_pw)
+            session.permanent = True
+            session["auth_unlocked"] = True
+    elif data.get("remove_password"):
+        if os.environ.get("MULTIFY_PASSWORD"):
+            return jsonify({"error": "Password is set via MULTIFY_PASSWORD environment variable and cannot be removed in the UI."}), 400
+        new_cfg["password_hash"] = ""
+        session.pop("auth_unlocked", None)
 
     if save_config(new_cfg):
         return jsonify({"success": True, "message": "Settings saved successfully."})

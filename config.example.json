@@ -1,10 +1,7 @@
 {
-  "spotify_client_id": "",
-  "spotify_client_secret": "",
+  "spotify_client_id": "YOUR_SPOTIFY_CLIENT_ID",
+  "spotify_client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
   "spotify_redirect_uri": "http://127.0.0.1:5099/callback",
   "ytmusic_headers": "",
-  "tidal_token_type": "",
-  "tidal_access_token": "",
-  "tidal_refresh_token": "",
-  "tidal_expiry_time": ""
+  "password_hash": ""
 }

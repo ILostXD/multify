@@ -210,6 +210,24 @@
                   background 0.22s ease;
     }
 
+    
+    /* ── Unlock Screen ── */
+    .unlock-container {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .unlock-card {
+      width: 100%;
+      max-width: 420px;
+      padding: 2.25rem;
+      border-radius: 20px;
+      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
     /* ── Top Header Navigation ── */
     .header {
       display: flex;
@@ -996,6 +1014,12 @@
   <div id="root" data-logged-in="{{ 'true' if logged_in else 'false' }}"></div>
 
   <!-- Lucide Vector Icon Component & React App -->
+    <script>
+    window.__INITIAL_AUTH__ = {
+      password_required: {{ 'true' if password_required else 'false' }},
+      is_unlocked: {{ 'true' if is_unlocked else 'false' }}
+    };
+  </script>
   <script type="text/babel">
   {% raw %}
     const rootEl = document.getElementById('root');
@@ -1236,6 +1260,17 @@
       const [isCreating, setIsCreating] = useState(false);
       const [createResult, setCreateResult] = useState(null);
 
+      /* Auth & Password State */
+      const [authRequired, setAuthRequired] = useState(window.__INITIAL_AUTH__ ? window.__INITIAL_AUTH__.password_required : false);
+      const [isUnlocked, setIsUnlocked] = useState(window.__INITIAL_AUTH__ ? window.__INITIAL_AUTH__.is_unlocked : true);
+      const [unlockPassword, setUnlockPassword] = useState('');
+      const [unlockError, setUnlockError] = useState('');
+      const [isUnlocking, setIsUnlocking] = useState(false);
+      const [newPasswordInput, setNewPasswordInput] = useState('');
+      const [showNewPassword, setShowNewPassword] = useState(false);
+      const [passwordSuccess, setPasswordSuccess] = useState('');
+      const [passwordError, setPasswordError] = useState('');
+
       /* Settings Modal State */
       const [showSettings, setShowSettings] = useState(false);
       const [settingsTab, setSettingsTab] = useState('spotify');
@@ -1244,7 +1279,9 @@
         spotify_client_id: '',
         spotify_client_secret: '',
         spotify_redirect_uri: 'http://127.0.0.1:5099/callback',
-        ytmusic_headers: ''
+        ytmusic_headers: '',
+        has_password: false,
+        is_env_password: false
       });
       const [isSavingSettings, setIsSavingSettings] = useState(false);
       const [settingsStatus, setSettingsStatus] = useState(null);
@@ -1277,13 +1314,23 @@
         fetch('/api/settings')
           .then(res => res.json())
           .then(data => {
+            if (data.locked) {
+              setIsUnlocked(false);
+              setAuthRequired(true);
+              return;
+            }
             setSettingsForm(prev => ({
               ...prev,
               spotify_client_id: data.spotify_client_id || '',
               spotify_client_secret: data.spotify_client_secret || '',
               spotify_redirect_uri: data.spotify_redirect_uri || 'http://127.0.0.1:5099/callback',
-              ytmusic_headers: data.ytmusic_headers || ''
+              ytmusic_headers: data.ytmusic_headers || '',
+              has_password: Boolean(data.has_password),
+              is_env_password: Boolean(data.is_env_password)
             }));
+            if (data.has_password !== undefined) {
+              setAuthRequired(Boolean(data.has_password));
+            }
           })
           .catch(() => {});
       };
@@ -1291,6 +1338,98 @@
       useEffect(() => {
         fetchStatusAndSettings();
       }, []);
+
+      
+      const handleUnlockApp = async (e) => {
+        if (e) e.preventDefault();
+        setUnlockError('');
+        setIsUnlocking(true);
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: unlockPassword })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            setUnlockError(data.error || 'Incorrect password.');
+            setIsUnlocking(false);
+            return;
+          }
+          setIsUnlocked(true);
+          setUnlockPassword('');
+          setIsUnlocking(false);
+          fetchStatusAndSettings();
+        } catch (err) {
+          setUnlockError('Connection error. Please try again.');
+          setIsUnlocking(false);
+        }
+      };
+
+      const handleLockApp = async () => {
+        try {
+          await fetch('/api/auth/logout', { method: 'POST' });
+          setIsUnlocked(false);
+          setAuthRequired(true);
+        } catch (err) {}
+      };
+
+      const handleSaveMasterPassword = async (e) => {
+        if (e) e.preventDefault();
+        setPasswordError('');
+        setPasswordSuccess('');
+        if (!newPasswordInput.trim()) {
+          setPasswordError('Password cannot be empty.');
+          return;
+        }
+        setIsSavingSettings(true);
+        try {
+          const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_password: newPasswordInput.trim() })
+          });
+          const data = await res.json();
+          setIsSavingSettings(false);
+          if (res.ok) {
+            setPasswordSuccess('Master Password saved! Instance is now protected.');
+            setNewPasswordInput('');
+            setAuthRequired(true);
+            setSettingsForm(prev => ({ ...prev, has_password: true }));
+          } else {
+            setPasswordError(data.error || 'Failed to set password.');
+          }
+        } catch (err) {
+          setIsSavingSettings(false);
+          setPasswordError('Failed to connect to server.');
+        }
+      };
+
+      const handleRemoveMasterPassword = async () => {
+        if (!confirm('Are you sure you want to remove password protection? Anyone on your network or public URL will have access to Multify.')) return;
+        setPasswordError('');
+        setPasswordSuccess('');
+        setIsSavingSettings(true);
+        try {
+          const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ remove_password: true })
+          });
+          const data = await res.json();
+          setIsSavingSettings(false);
+          if (res.ok) {
+            setPasswordSuccess('Password protection removed.');
+            setAuthRequired(false);
+            setSettingsForm(prev => ({ ...prev, has_password: false }));
+          } else {
+            setPasswordError(data.error || 'Failed to remove password.');
+          }
+        } catch (err) {
+          setIsSavingSettings(false);
+          setPasswordError('Failed to connect to server.');
+        }
+      };
 
       const toggleTheme = useCallback(() => {
         setTheme(t => t === 'dark' ? 'light' : 'dark');
@@ -1641,6 +1780,56 @@
 
       const isInGuestMode = Boolean(guestMode[selectedProvider] && !isRealConnected);
       const isCurrentProviderConnected = isRealConnected || isInGuestMode;
+
+            /* ── Unlock Guard Screen ── */
+      if (authRequired && !isUnlocked) {
+        return (
+          <div className="app-root unlock-container">
+            <div className="glass-card unlock-card">
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '1.75rem' }}>
+                <MultifyLogo size={56} style={{ marginBottom: '1.15rem' }} />
+                <h2 style={{ fontSize: '1.45rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: '0.35rem' }}>Multify is Protected</h2>
+                <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', fontWeight: 600 }}>Enter the Master Password to access your playlist converter.</p>
+              </div>
+
+              {unlockError && (
+                <div className="glass-alert glass-alert-error" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <Icon name="alert-circle" size={16} />
+                  <span>{unlockError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUnlockApp}>
+                <div className="settings-field-group" style={{ marginBottom: '1.5rem' }}>
+                  <label className="settings-label">Master Access Password</label>
+                  <div className="settings-input-wrapper">
+                    <Icon name="lock" size={16} style={{ color: 'var(--text-muted)' }} />
+                    <input
+                      type="password"
+                      className="settings-input"
+                      placeholder="Enter password..."
+                      value={unlockPassword}
+                      onChange={e => setUnlockPassword(e.target.value)}
+                      autoFocus
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUnlocking || !unlockPassword}
+                  className="glass-btn glass-btn-primary"
+                  style={{ width: '100%', justifyContent: 'center', padding: '0.75rem 1rem' }}
+                >
+                  <Icon name={isUnlocking ? 'loader' : 'unlock'} size={16} />
+                  <span>{isUnlocking ? 'Unlocking...' : 'Unlock Multify'}</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div className="app-root">
@@ -2219,6 +2408,96 @@
 
                 {settingsTab === 'tidal' && (
                   <div>
+
+                {settingsTab === 'security' && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.85rem 1rem', background: 'var(--input-bg)', borderRadius: 12, border: '1px solid var(--input-border)', marginBottom: '1.25rem' }}>
+                      <div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800 }}>Protection Status</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                          {settingsForm.is_env_password
+                            ? 'Enforced via MULTIFY_PASSWORD environment variable'
+                            : (settingsForm.has_password ? 'Protected with Master Password' : 'Unprotected (Local mode)')}
+                        </div>
+                      </div>
+                      <span className={`status-pill ${settingsForm.has_password ? 'status-pill-ok' : 'status-pill-warn'}`}>
+                        <span className="status-dot"></span>
+                        {settingsForm.has_password ? 'Protected' : 'Unprotected'}
+                      </span>
+                    </div>
+
+                    {passwordSuccess && (
+                      <div className="glass-alert glass-alert-success" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <Icon name="check-circle" size={16} />
+                        <span>{passwordSuccess}</span>
+                      </div>
+                    )}
+
+                    {passwordError && (
+                      <div className="glass-alert glass-alert-error" style={{ marginBottom: '1.25rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <Icon name="alert-circle" size={16} />
+                        <span>{passwordError}</span>
+                      </div>
+                    )}
+
+                    {settingsForm.is_env_password ? (
+                      <div style={{ padding: '0.85rem', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid var(--input-border)', fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        <div style={{ fontWeight: 800, color: 'var(--text)', marginBottom: '0.25rem' }}>Environment Variable Active</div>
+                        The Master Password is configured in your Docker / system environment (<code>MULTIFY_PASSWORD</code>). To change it, update your <code>docker-compose.yml</code> or environment configuration.
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveMasterPassword}>
+                        <div className="settings-field-group">
+                          <label className="settings-label">{settingsForm.has_password ? 'Change Master Password' : 'Set Master Password'}</label>
+                          <div className="settings-input-wrapper">
+                            <Icon name="lock" size={16} style={{ color: 'var(--text-muted)' }} />
+                            <input
+                              type={showNewPassword ? "text" : "password"}
+                              className="settings-input"
+                              placeholder="Enter new master password..."
+                              value={newPasswordInput}
+                              onChange={e => setNewPasswordInput(e.target.value)}
+                              required
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px', display: 'flex', alignItems: 'center' }}
+                              title={showNewPassword ? "Hide" : "Show"}
+                            >
+                              <Icon name={showNewPassword ? "eye-off" : "eye"} size={16} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1.25rem' }}>
+                          Protects your API keys, Spotify secret, YouTube Music headers, and playlist conversion from unauthorized visitors.
+                        </p>
+
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'space-between', alignItems: 'center' }}>
+                          {settingsForm.has_password ? (
+                            <button
+                              type="button"
+                              onClick={handleRemoveMasterPassword}
+                              disabled={isSavingSettings}
+                              className="glass-btn"
+                              style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
+                            >
+                              <Icon name="trash-2" size={14} />
+                              <span>Remove Password</span>
+                            </button>
+                          ) : <div></div>}
+
+                          <button type="submit" disabled={isSavingSettings || !newPasswordInput.trim()} className="glass-btn glass-btn-primary">
+                            <Icon name={isSavingSettings ? 'loader' : 'check'} size={15} />
+                            <span>{settingsForm.has_password ? 'Update Password' : 'Set Password'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+
                     <div style={{ padding: '1rem', borderRadius: 14, background: 'var(--input-bg)', border: '1px solid var(--card-border)', marginBottom: '1.25rem' }}>
                       <h4 style={{ fontSize: '0.92rem', fontWeight: 800, marginBottom: '0.35rem' }}>Tidal Device Authorization</h4>
                       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1rem' }}>

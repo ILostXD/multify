@@ -52,6 +52,7 @@ Tabbed credential management for Spotify OAuth, YouTube Music session headers, a
 - **Manual Review & Dropdown Override**: Pick alternative match candidates or skip individual tracks before generating playlists.
 - **Missing Track Exporter**: Export unmatched or skipped tracks into a clean `.txt` list for reference.
 - **Fluid Liquid Glass Interface**: High-contrast dark and light modes, reactive ambient orbs, and a floating action dock.
+- **Master Password Protection**: Secure self-hosted instances on public URLs or HTTPS with a lightweight access password, while keeping local installations friction-free.
 - **Local & Secure**: All credentials, session tokens, and cache files stay 100% local on your machine.
 
 ## Supported Input Playlists
@@ -148,6 +149,19 @@ multify/
 ## AI Assistance & Development
 
 This codebase was designed and developed with **AI pair-programming assistance** using **Google Antigravity**, adhering to clean architectural patterns, provider abstraction layers, and modern UI/UX design standards.
+
+## Security & Public Deployments
+
+When running Multify on a remote server or domain (e.g. over HTTPS for Spotify OAuth), anyone on your network could potentially access your instance. Multify includes built-in Master Password protection:
+
+- **Configure via Web UI**: Open **Settings** > **Security** tab and set your Master Password.
+- **Configure via Docker**: Set the `MULTIFY_PASSWORD` environment variable in `docker-compose.yml`:
+  ```yaml
+  environment:
+    - CONFIG_FILE=/app/data/config.json
+    - MULTIFY_PASSWORD=your_super_secure_password
+  ```
+When active, all conversion routes, API endpoints, and sensitive settings are locked behind a sleek unlock screen.
 
 ## License
 

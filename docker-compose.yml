@@ -9,3 +9,4 @@ services:
       - ./data:/app/data
     environment:
       - CONFIG_FILE=/app/data/config.json
+      # - MULTIFY_PASSWORD=your_secure_password_here

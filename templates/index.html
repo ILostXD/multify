@@ -2278,7 +2278,17 @@
                   </button>
                 </div>
 
-                {/* Tabs with official vector logos */}
+                {/* Smart HTTPS / Network Security Notice */}
+                {(!settingsForm.has_password && (window.location.protocol === 'https:' || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') || (settingsForm.spotify_redirect_uri && settingsForm.spotify_redirect_uri.startsWith('https://')))) && (
+                  <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center', padding: '0.75rem 0.95rem', borderRadius: 12, background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#eab308', marginBottom: '1.25rem' }}>
+                    <Icon name="alert-triangle" size={18} style={{ flexShrink: 0 }} />
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)', lineHeight: 1.45 }}>
+                      <b>Security Recommendation:</b> Multify is running over HTTPS / public network without password protection. Click the <a href="#security" onClick={(e) => { e.preventDefault(); setSettingsTab('security'); }} style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'underline' }}>Security tab</a> to set a Master Password and secure your credentials.
+                    </div>
+                  </div>
+                )}
+
+                {/* Tabs with official vector logos & security */}
                 <div className="modal-tab-bar">
                   <button
                     className={`modal-tab-btn ${settingsTab === 'spotify' ? 'active' : ''}`}
@@ -2300,6 +2310,13 @@
                   >
                     <TidalLogo size={16} color="currentColor" />
                     <span>Tidal</span>
+                  </button>
+                  <button
+                    className={`modal-tab-btn ${settingsTab === 'security' ? 'active' : ''}`}
+                    onClick={() => { setSettingsTab('security'); setPasswordSuccess(''); setPasswordError(''); }}
+                  >
+                    <Icon name="shield" size={15} />
+                    <span>Security</span>
                   </button>
                 </div>
 

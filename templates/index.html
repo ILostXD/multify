@@ -1215,7 +1215,11 @@
     function normalizeStr(str) {
       if (!str) return '';
       return str
+        .normalize('NFKD')
+        .replace(/[̀-ͯ]/g, '')
         .toLowerCase()
+        .replace(/\$/g, 's')
+        .replace(/@/g, 'a')
         .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, ' ')
         .replace(/[^\w\s]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -1237,18 +1241,18 @@
         if (cTitle.includes(w)) matchingWords++;
       }
       const titleRatio = titleWords.length > 0 ? (matchingWords / titleWords.length) : 0;
-      const titleConfident = titleExact || titleStarts || (titleIncludes && titleRatio >= 0.55) || (titleRatio >= 0.6);
+      const titleConfident = titleExact || titleStarts || (titleIncludes && titleRatio >= 0.4) || (titleRatio >= 0.45);
 
       const sArtist = normalizeStr(searchedArtist);
       const cArtist = normalizeStr(candidate.artists);
       let artistConfident = false;
       if (!sArtist) {
-        artistConfident = titleExact || (titleStarts && sTitle.length > 4);
+        artistConfident = titleExact || (titleStarts && sTitle.length > 3);
       } else {
         const artistExact = (sArtist === cArtist);
         const artistIncludes = cArtist.includes(sArtist) || sArtist.includes(cArtist);
         
-        // Multi-artist splitting (check if any primary or individual artist matches)
+        // Multi-artist splitting
         const subArtists = searchedArtist.split(/[•/;,]|\s+&\s+|\s+(?:feat|ft|vs|with)\.?\s+/i)
           .map(a => normalizeStr(a))
           .filter(Boolean);
@@ -1260,10 +1264,10 @@
           if (cArtist.includes(w)) matchArtistWords++;
         }
         const artistRatio = artistWords.length > 0 ? (matchArtistWords / artistWords.length) : 0;
-        artistConfident = artistExact || artistIncludes || anySubArtistMatches || (artistRatio >= 0.35);
+        artistConfident = artistExact || artistIncludes || anySubArtistMatches || (artistRatio >= 0.25);
       }
 
-      return titleConfident && artistConfident;
+      return titleConfident && (artistConfident || titleExact);
     }
 
     const SEARCH_DELAY_MS = 40;
@@ -1273,14 +1277,17 @@
     const TrackRow = React.memo(function TrackRow({ track, index, onSelectTrack, targetProvider, onSearchSingle }) {
       const pData = (track.providers && track.providers[targetProvider]) || { searched: false, candidates: [], selectedUri: null };
 
+      const selectedCandidate = pData.candidates.find(c => (c.uri && c.uri === pData.selectedUri) || (c.id && c.id === pData.selectedUri)) || (pData.candidates.length > 0 ? pData.candidates[0] : null);
+
       let statusClass = '';
-      if (pData.selectedUri && pData.selectedUri !== 'skip') statusClass = 'status-matched';
-      else if (pData.selectedUri === 'skip') statusClass = 'status-skipped';
-      else if (pData.searched) {
+      if (pData.selectedUri && pData.selectedUri !== 'skip') {
+        const isConfident = isConfidentMatch(track.artist, track.title, selectedCandidate);
+        statusClass = isConfident ? 'status-matched' : 'status-review';
+      } else if (pData.selectedUri === 'skip') {
+        statusClass = 'status-skipped';
+      } else if (pData.searched) {
         statusClass = pData.candidates.length === 0 ? 'status-unmatched' : 'status-review';
       }
-
-      const selectedCandidate = pData.candidates.find(c => (c.uri && c.uri === pData.selectedUri) || (c.id && c.id === pData.selectedUri)) || (pData.candidates.length > 0 ? pData.candidates[0] : null);
       const artSrc = selectedCandidate ? selectedCandidate.album_art : '';
 
       return (
@@ -1670,8 +1677,8 @@
             if (!cur) return prev;
             const curProv = (cur.providers && cur.providers[provider]) || {};
             let chosen = curProv.selectedUri;
-            if (!chosen && candidates.length > 0 && isConfidentMatch(cur.artist, cur.title, candidates[0])) {
-              chosen = candidates[0].uri;
+            if (!chosen && candidates.length > 0) {
+              chosen = candidates[0].uri || candidates[0].id;
             }
             next[index] = {
               ...cur,
@@ -1733,7 +1740,7 @@
               if (!cur) return prev;
               const curProv = (cur.providers && cur.providers[provider]) || {};
               let chosen = curProv.selectedUri;
-              if (!chosen && candidates.length > 0 && isConfidentMatch(cur.artist, cur.title, candidates[0])) {
+              if (!chosen && candidates.length > 0) {
                 chosen = candidates[0].uri || candidates[0].id;
               }
               next[i] = {

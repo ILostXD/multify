@@ -1364,9 +1364,21 @@
                 </button>
               </div>
             ) : pData.candidates.length === 0 ? (
-              <div style={{ color: 'var(--danger)', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <Icon name="alert-circle" size={14} />
-                <span>No match found on {targetProvider === 'spotify' ? 'Spotify' : targetProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.6rem' }}>
+                <div style={{ color: 'var(--danger)', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Icon name="alert-circle" size={14} />
+                  <span>No match found on {targetProvider === 'spotify' ? 'Spotify' : targetProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSearchSingle(index, targetProvider)}
+                  className="glass-btn"
+                  style={{ padding: '0.25rem 0.65rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                  title="Search this track again"
+                >
+                  <Icon name="rotate-cw" size={12} />
+                  <span>Search Again</span>
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', width: '100%' }}>
@@ -1423,8 +1435,43 @@
       const [providersStatus, setProvidersStatus] = useState({});
       const [guestMode, setGuestMode] = useState({ ytmusic: false, tidal: false });
 
-      const [tracks, setTracks] = useState([]);
-      const [playlistName, setPlaylistName] = useState("Default Playlist Name");
+      const [tracks, setTracks] = useState(() => {
+        try {
+          const saved = localStorage.getItem('multify_cached_tracks');
+          return saved ? JSON.parse(saved) : [];
+        } catch (e) {
+          return [];
+        }
+      });
+      const [playlistName, setPlaylistName] = useState(() => localStorage.getItem('multify_cached_name') || "Default Playlist Name");
+
+      useEffect(() => {
+        try {
+          if (tracks && tracks.length > 0) {
+            localStorage.setItem('multify_cached_tracks', JSON.stringify(tracks));
+          } else {
+            localStorage.removeItem('multify_cached_tracks');
+          }
+        } catch (e) {}
+      }, [tracks]);
+
+      useEffect(() => {
+        try {
+          if (playlistName) {
+            localStorage.setItem('multify_cached_name', playlistName);
+          }
+        } catch (e) {}
+      }, [playlistName]);
+
+      const handleResetPlaylist = () => {
+        if (confirm("Clear current playlist and search progress?")) {
+          setTracks([]);
+          setPlaylistName("Default Playlist Name");
+          setSearchProgress({ current: 0, total: 0 });
+          localStorage.removeItem('multify_cached_tracks');
+          localStorage.removeItem('multify_cached_name');
+        }
+      };
       const [isParsing, setIsParsing] = useState(false);
       const [searchingProvider, setSearchingProvider] = useState(null);
       const [searchProgress, setSearchProgress] = useState({ current: 0, total: 0 });

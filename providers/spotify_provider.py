@@ -2,6 +2,7 @@ import base64
 import re
 import time
 import requests
+import concurrent.futures
 from typing import List, Dict, Any, Optional, Tuple
 from providers import BaseProvider
 from resolvers.smart_resolver import SmartResolver, extract_artist_variations, extract_title_variations
@@ -9,6 +10,8 @@ from resolvers.smart_resolver import SmartResolver, extract_artist_variations, e
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
+
+_ISRC_TO_SPOTIFY_CACHE: Dict[str, str] = {}
 
 
 class SpotifyProvider(BaseProvider):
@@ -66,7 +69,7 @@ class SpotifyProvider(BaseProvider):
     def search(self, artist: str, title: str, album: str, config: Dict[str, Any], session_data: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Optional[int]]:
         headers = self.get_auth_header(config, session_data)
         
-        # 1. Fetch Multi-Option Candidates via SmartResolver (Deezer + iTunes + ISRC)
+        # 1. Fetch Candidates via SmartResolver (Deezer Multi-Query + Scoring)
         open_candidates = SmartResolver.get_candidates(artist, title, album)
         
         results = []
@@ -82,6 +85,7 @@ class SpotifyProvider(BaseProvider):
                     for h in isrc_hits:
                         h["match_badge"] = "Exact Match"
                         h["match_score"] = 100
+                        _ISRC_TO_SPOTIFY_CACHE[top_isrc] = h["uri"]
                     results += isrc_hits
                 elif retry:
                     rate_limit_hit = True
@@ -139,7 +143,7 @@ class SpotifyProvider(BaseProvider):
         url = f"{SPOTIFY_API_BASE}/search"
         params = {"q": query, "type": "track", "limit": 5}
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=8)
+            resp = requests.get(url, headers=headers, params=params, timeout=6)
             if resp.status_code == 429:
                 hdr = resp.headers.get("Retry-After", "5")
                 try:
@@ -183,24 +187,59 @@ class SpotifyProvider(BaseProvider):
         if not headers:
             return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
-        resolved_uris = []
+        # ── Fast Parallel ISRC & URI Resolution ──────────────────────────────
+        direct_uris = []
+        isrc_queries = []
+
         for u in track_uris:
             if not u or not isinstance(u, str):
                 continue
             u = u.strip()
+            # If it's already a native 22-character Spotify URI
             if (u.startswith("spotify:track:") and len(u) == 36 and "_" not in u) or u.startswith("spotify:episode:"):
-                resolved_uris.append(u)
+                direct_uris.append(u)
             elif u.startswith("spotify:track:") or u.startswith("isrc:"):
                 code = u.replace("spotify:track:", "").replace("isrc:", "").strip()
-                if code:
-                    try:
-                        sp_res = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params={"q": f"isrc:{code}", "type": "track", "limit": 1}, timeout=5)
-                        if sp_res.status_code == 200:
-                            itms = sp_res.json().get("tracks", {}).get("items", [])
-                            if itms:
-                                resolved_uris.append(itms[0]["uri"])
-                    except Exception:
-                        pass
+                if code.startswith("deezer_") or code.startswith("itunes_"):
+                    continue
+                if code in _ISRC_TO_SPOTIFY_CACHE:
+                    direct_uris.append(_ISRC_TO_SPOTIFY_CACHE[code])
+                elif code:
+                    isrc_queries.append(code)
+
+        def resolve_isrc(code: str) -> Optional[str]:
+            try:
+                sp_res = requests.get(
+                    f"{SPOTIFY_API_BASE}/search",
+                    headers=headers,
+                    params={"q": f"isrc:{code}", "type": "track", "limit": 1},
+                    timeout=4
+                )
+                if sp_res.status_code == 200:
+                    itms = sp_res.json().get("tracks", {}).get("items", [])
+                    if itms:
+                        sp_uri = itms[0]["uri"]
+                        _ISRC_TO_SPOTIFY_CACHE[code] = sp_uri
+                        return sp_uri
+            except Exception:
+                pass
+            return None
+
+        # Resolve all ISRCs concurrently in parallel (completes in ~1-2 seconds)
+        if isrc_queries:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+                resolved_results = list(executor.map(resolve_isrc, isrc_queries))
+                for res in resolved_results:
+                    if res:
+                        direct_uris.append(res)
+
+        # Deduplicate while preserving playlist order
+        seen_uris = set()
+        resolved_uris = []
+        for u in direct_uris:
+            if u and u not in seen_uris:
+                seen_uris.add(u)
+                resolved_uris.append(u)
 
         if not resolved_uris:
             return {"success": False, "error": "No valid Spotify track matches found to add to playlist."}
@@ -217,13 +256,13 @@ class SpotifyProvider(BaseProvider):
                 f"{SPOTIFY_API_BASE}/me/playlists",
                 headers={**headers, "Content-Type": "application/json"},
                 json=payload,
-                timeout=12
+                timeout=10
             )
             if create_resp.status_code in (200, 201):
                 break
 
         if not create_resp or create_resp.status_code not in (200, 201):
-            me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=10)
+            me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=8)
             if me_resp.status_code == 200:
                 user_id = me_resp.json().get("id")
                 if user_id:
@@ -231,7 +270,7 @@ class SpotifyProvider(BaseProvider):
                         f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
                         headers={**headers, "Content-Type": "application/json"},
                         json={"name": name, "public": False, "description": "Imported via Multify"},
-                        timeout=12
+                        timeout=10
                     )
 
         if not create_resp or create_resp.status_code not in (200, 201):
@@ -250,7 +289,7 @@ class SpotifyProvider(BaseProvider):
                         f"Spotify 403 Forbidden ({err_msg}). "
                         "If your Spotify Developer App is in Development Mode, you MUST add your Spotify account email "
                         "under 'User Management' in the Spotify Developer Dashboard (developer.spotify.com/dashboard), "
-                        "or re-login to Spotify to refresh your authorization scopes."
+                        "or re-login to Spotify in Settings."
                     )
                 }
             elif status_code == 401:
@@ -273,14 +312,14 @@ class SpotifyProvider(BaseProvider):
                 f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
                 headers={**headers, "Content-Type": "application/json"},
                 json={"uris": batch},
-                timeout=15
+                timeout=12
             )
             if add_resp.status_code not in (200, 201):
                 add_resp = requests.post(
                     f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
                     headers={**headers, "Content-Type": "application/json"},
                     json={"uris": batch},
-                    timeout=15
+                    timeout=12
                 )
 
             if add_resp.status_code in (200, 201):

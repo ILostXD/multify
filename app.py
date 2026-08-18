@@ -158,7 +158,7 @@ def gatekeeper():
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API = "https://api.spotify.com/v1"
-SCOPES = "playlist-modify-public playlist-modify-private playlist-read-private"
+SCOPES = "playlist-modify-public playlist-modify-private playlist-read-private user-read-private user-read-email"
 
 
 # ─────────────────────────────────────────────────────────────────────────

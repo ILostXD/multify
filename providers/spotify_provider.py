@@ -1,3 +1,4 @@
+import base64
 import re
 import time
 import requests
@@ -8,17 +9,56 @@ SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 
+
 class SpotifyProvider(BaseProvider):
     name = "spotify"
     display_name = "Spotify"
     brand_color = "#1db954"
     icon = "disc"
 
+    def _get_fresh_token(self, config: Dict[str, Any], session_data: Dict[str, Any]) -> Optional[str]:
+        """Return a valid, non-expired access token, automatically refreshing if needed."""
+        token = session_data.get("access_token") or config.get("spotify_access_token")
+        expires_at = session_data.get("token_expires_at") or config.get("spotify_token_expires_at", 0)
+        refresh_token = session_data.get("refresh_token") or config.get("spotify_refresh_token")
+
+        if token and time.time() < (expires_at - 60):
+            return token
+
+        if refresh_token:
+            client_id = config.get("spotify_client_id")
+            client_secret = config.get("spotify_client_secret")
+            if client_id and client_secret:
+                try:
+                    auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+                    resp = requests.post(
+                        SPOTIFY_TOKEN_URL,
+                        headers={"Authorization": f"Basic {auth_header}"},
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                        },
+                        timeout=10
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        new_token = data["access_token"]
+                        new_expires = time.time() + data.get("expires_in", 3600) - 120
+                        session_data["access_token"] = new_token
+                        session_data["token_expires_at"] = new_expires
+                        if data.get("refresh_token"):
+                            session_data["refresh_token"] = data["refresh_token"]
+                        return new_token
+                except Exception:
+                    pass
+
+        return token
+
     def is_authenticated(self, config: Dict[str, Any], session_data: Dict[str, Any]) -> bool:
-        return bool(session_data.get("access_token") or config.get("spotify_access_token") or config.get("spotify_refresh_token"))
+        return bool(self._get_fresh_token(config, session_data) or config.get("spotify_refresh_token"))
 
     def get_auth_header(self, config: Dict[str, Any], session_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
-        token = session_data.get("access_token") or config.get("spotify_access_token")
+        token = self._get_fresh_token(config, session_data)
         if not token:
             return None
         return {"Authorization": f"Bearer {token}"}
@@ -43,22 +83,22 @@ class SpotifyProvider(BaseProvider):
                 return [], retry
             results += hits
 
-        # Strategy 2: If album is known from file tags
-        if clean_artist and clean_album and clean_title:
+        # Strategy 2: If album is known from file tags (ONLY executed as fallback if Strategy 1 yielded 0 results)
+        if not results and clean_artist and clean_album and clean_title:
             q2 = f"{clean_artist} {clean_album} {clean_title}".strip()
             hits, retry = self._spotify_search(q2, headers, seen_ids)
             if retry:
                 return [], retry
             results += hits
 
-        # Strategy 3: Strict track & artist search
-        if clean_artist and clean_title:
+        # Strategy 3: Strict track & artist search (ONLY executed as fallback if still 0 results)
+        if not results and clean_artist and clean_title:
             q3 = f'track:"{clean_title}" artist:"{clean_artist}"'
             hits, retry = self._spotify_search(q3, headers, seen_ids)
             if retry:
                 return [], retry
             results += hits
-        elif clean_title:
+        elif not results and clean_title:
             hits, retry = self._spotify_search(title.strip(), headers, seen_ids)
             if retry:
                 return [], retry
@@ -157,57 +197,104 @@ class SpotifyProvider(BaseProvider):
     def create_playlist(self, name: str, track_uris: List[str], config: Dict[str, Any], session_data: Dict[str, Any]) -> Dict[str, Any]:
         headers = self.get_auth_header(config, session_data)
         if not headers:
-            return {"success": False, "error": "Not authenticated with Spotify."}
+            return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
         # Filter and validate Spotify track URIs
         valid_uris = [u for u in track_uris if u and (u.startswith("spotify:track:") or u.startswith("spotify:episode:"))]
         if not valid_uris:
             return {"success": False, "error": "No valid Spotify track matches found to add to playlist."}
 
-        # 1. Create Playlist using /me/playlists (modern endpoint) with fallback to /users/{id}/playlists
-        create_resp = requests.post(
-            f"{SPOTIFY_API_BASE}/me/playlists",
-            headers={**headers, "Content-Type": "application/json"},
-            json={"name": name, "public": False, "description": "Imported via Multify"},
-            timeout=10
-        )
+        # 1. Create Playlist using /me/playlists (modern endpoint)
+        payloads_to_try = [
+            {"name": name, "public": False, "description": "Imported via Multify"},
+            {"name": name, "public": True, "description": "Imported via Multify"},
+            {"name": name, "description": "Imported via Multify"}
+        ]
 
-        if create_resp.status_code not in (200, 201):
-            # Fallback to /users/{user_id}/playlists
+        create_resp = None
+        for payload in payloads_to_try:
+            create_resp = requests.post(
+                f"{SPOTIFY_API_BASE}/me/playlists",
+                headers={**headers, "Content-Type": "application/json"},
+                json=payload,
+                timeout=12
+            )
+            if create_resp.status_code in (200, 201):
+                break
+
+        # Fallback to /users/{user_id}/playlists if /me failed
+        if not create_resp or create_resp.status_code not in (200, 201):
             me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=10)
             if me_resp.status_code == 200:
                 user_id = me_resp.json().get("id")
-                create_resp = requests.post(
-                    f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
-                    headers={**headers, "Content-Type": "application/json"},
-                    json={"name": name, "public": False, "description": "Imported via Multify"},
-                    timeout=10
-                )
+                if user_id:
+                    create_resp = requests.post(
+                        f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={"name": name, "public": False, "description": "Imported via Multify"},
+                        timeout=12
+                    )
 
-        if create_resp.status_code not in (200, 201):
-            return {"success": False, "error": f"Failed to create playlist: {create_resp.text}"}
+        if not create_resp or create_resp.status_code not in (200, 201):
+            status_code = create_resp.status_code if create_resp else 500
+            err_msg = ""
+            try:
+                err_data = create_resp.json().get("error", {})
+                err_msg = err_data.get("message", create_resp.text if create_resp else "Unknown error")
+            except Exception:
+                err_msg = create_resp.text if create_resp else "Unknown error"
+
+            if status_code == 403:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spotify 403 Forbidden ({err_msg}). "
+                        "If your Spotify Developer App is in Development Mode, you MUST add your Spotify account email "
+                        "under 'User Management' in the Spotify Developer Dashboard (developer.spotify.com/dashboard), "
+                        "or re-login to Spotify to refresh your authorization scopes."
+                    )
+                }
+            elif status_code == 401:
+                return {
+                    "success": False,
+                    "error": "Spotify session expired (401). Please click Re-login to Spotify in Settings."
+                }
+            else:
+                return {"success": False, "error": f"Failed to create Spotify playlist ({status_code}): {err_msg}"}
 
         pdata = create_resp.json()
         playlist_id = pdata.get("id")
         playlist_url = pdata.get("external_urls", {}).get("spotify", "")
 
-        # 2. Add tracks in batches of 100
+        # 2. Add tracks in batches of 100 using /items endpoint with fallback to /tracks
         total_added = 0
         batch_size = 100
         for i in range(0, len(valid_uris), batch_size):
             batch = valid_uris[i:i + batch_size]
+            
+            # Try /items endpoint first (2026 modern spec)
             add_resp = requests.post(
-                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
+                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
                 headers={**headers, "Content-Type": "application/json"},
                 json={"uris": batch},
                 timeout=15
             )
+            
+            # Fallback to /tracks endpoint if /items is not supported on older API proxy
+            if add_resp.status_code not in (200, 201):
+                add_resp = requests.post(
+                    f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
+                    headers={**headers, "Content-Type": "application/json"},
+                    json={"uris": batch},
+                    timeout=15
+                )
+
             if add_resp.status_code in (200, 201):
                 total_added += len(batch)
             else:
                 return {
                     "success": False,
-                    "error": f"Added {total_added} tracks, but failed adding remaining batch: {add_resp.text}",
+                    "error": f"Created playlist '{name}', but failed adding track batch: {add_resp.text}",
                     "playlist_name": name,
                     "playlist_url": playlist_url,
                     "track_count": total_added

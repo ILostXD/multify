@@ -6,12 +6,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source and assets
-COPY app.py .
-COPY providers/ providers/
-COPY resolvers/ resolvers/
-COPY templates/ templates/
-COPY assets/ assets/
+# Copy entire application codebase
+COPY . .
 
 EXPOSE 5099
 

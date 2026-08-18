@@ -76,22 +76,25 @@ class SpotifyProvider(BaseProvider):
         clean_artist = _clean_string(artist) or artist
         clean_album = _clean_string(album) if album else ""
 
-        # ── Tier 1: Smart Open Catalog & ISRC Resolution ─────────────────────
+        # ── Tier 1: Smart Open Catalog & ISRC Resolution (Zero Quota) ─────────
+        meta = {}
         try:
             meta = SmartResolver.get_isrc_and_metadata(clean_artist, clean_title, clean_album)
             isrc = meta.get("isrc")
             if isrc:
                 isrc_hits, retry = self._spotify_search(f"isrc:{isrc}", headers, seen_ids)
-                if retry:
-                    return [], retry
                 if isrc_hits:
-                    # Exact ISRC match found on Spotify!
-                    results += isrc_hits
-                    return results, None
+                    return isrc_hits, None
 
-            # Check Songlink cross-platform bridge if Deezer ID was found
+            # Check Songlink cross-platform bridge (using Deezer ID or iTunes URL)
+            track_url = ""
             if meta.get("deezer_id"):
-                links = SmartResolver.resolve_cross_platform_links(f"https://www.deezer.com/track/{meta['deezer_id']}")
+                track_url = f"https://www.deezer.com/track/{meta['deezer_id']}"
+            elif meta.get("itunes_url"):
+                track_url = meta["itunes_url"]
+
+            if track_url:
+                links = SmartResolver.resolve_cross_platform_links(track_url)
                 sp_id = links.get("spotify_id")
                 if sp_id and sp_id not in seen_ids:
                     try:
@@ -117,38 +120,80 @@ class SpotifyProvider(BaseProvider):
                                 "preview_url": t.get("preview_url") or meta.get("preview_url")
                             })
                             return results, None
+                        elif trk_resp.status_code != 429:
+                            results.append({
+                                "id": sp_id,
+                                "uri": f"spotify:track:{sp_id}",
+                                "name": meta.get("title", clean_title),
+                                "artists": meta.get("artist", clean_artist),
+                                "album": meta.get("album", ""),
+                                "album_art": meta.get("artwork_url", ""),
+                                "album_type": "album",
+                                "album_artists": meta.get("artist", clean_artist),
+                                "popularity": 90,
+                                "duration_ms": meta.get("duration_ms", 0),
+                                "preview_url": meta.get("preview_url")
+                            })
+                            return results, None
                     except Exception:
                         pass
         except Exception:
             pass
 
         # ── Tier 2: Spotify Relevance Query (Single Shot) ────────────────────
+        rate_limit_retry = None
         if not results and clean_artist and clean_title:
             q1 = f"{clean_artist} {clean_title}".strip()
             hits, retry = self._spotify_search(q1, headers, seen_ids)
             if retry:
-                return [], retry
-            results += hits
+                rate_limit_retry = retry
+            elif hits:
+                results += hits
 
-        # ── Tier 3: Strict & Album Fallbacks (Only if 0 results) ─────────────
-        if not results and clean_artist and clean_album and clean_title:
+        # ── Tier 3: Strict & Album Fallbacks (Only if 0 results & not rate-limited) ──
+        if not results and not rate_limit_retry and clean_artist and clean_album and clean_title:
             q2 = f"{clean_artist} {clean_album} {clean_title}".strip()
             hits, retry = self._spotify_search(q2, headers, seen_ids)
             if retry:
-                return [], retry
-            results += hits
+                rate_limit_retry = retry
+            elif hits:
+                results += hits
 
-        if not results and clean_artist and clean_title:
+        if not results and not rate_limit_retry and clean_artist and clean_title:
             q3 = f'track:"{clean_title}" artist:"{clean_artist}"'
             hits, retry = self._spotify_search(q3, headers, seen_ids)
             if retry:
-                return [], retry
-            results += hits
-        elif not results and clean_title:
+                rate_limit_retry = retry
+            elif hits:
+                results += hits
+        elif not results and not rate_limit_retry and clean_title:
             hits, retry = self._spotify_search(clean_title, headers, seen_ids)
             if retry:
-                return [], retry
-            results += hits
+                rate_limit_retry = retry
+            elif hits:
+                results += hits
+
+        # ── Tier 4: Open Catalog Graceful Fallback on Spotify 429 ─────────────
+        if not results and rate_limit_retry and meta and meta.get("title") and (meta.get("isrc") or meta.get("artwork_url")):
+            isrc_code = meta.get("isrc") or ""
+            track_ident = f"isrc:{isrc_code}" if isrc_code else f"meta:{clean_title}"
+            results.append({
+                "id": track_ident,
+                "uri": f"spotify:track:{isrc_code}" if isrc_code else "",
+                "name": meta.get("title", clean_title),
+                "artists": meta.get("artist", clean_artist),
+                "album": meta.get("album", clean_album),
+                "album_art": meta.get("artwork_url", ""),
+                "album_type": "album",
+                "album_artists": meta.get("artist", clean_artist),
+                "popularity": 85,
+                "duration_ms": meta.get("duration_ms", 0),
+                "preview_url": meta.get("preview_url")
+            })
+            return results, None
+
+        if not results and rate_limit_retry:
+            return [], min(rate_limit_retry, 5)
 
         if not results:
             return results, None
@@ -245,9 +290,28 @@ class SpotifyProvider(BaseProvider):
         if not headers:
             return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
-        # Filter and validate Spotify track URIs
-        valid_uris = [u for u in track_uris if u and (u.startswith("spotify:track:") or u.startswith("spotify:episode:"))]
-        if not valid_uris:
+        # Resolve URIs (handling 22-char IDs, episodes, and ISRC resolutions)
+        resolved_uris = []
+        for u in track_uris:
+            if not u or not isinstance(u, str):
+                continue
+            u = u.strip()
+            # Standard Spotify URI: "spotify:track:..." (36 chars) or "spotify:episode:..."
+            if (u.startswith("spotify:track:") and len(u) == 36) or u.startswith("spotify:episode:"):
+                resolved_uris.append(u)
+            elif u.startswith("spotify:track:") or u.startswith("isrc:"):
+                code = u.replace("spotify:track:", "").replace("isrc:", "").strip()
+                if code:
+                    try:
+                        sp_res = requests.get(f"{SPOTIFY_API_BASE}/search", headers=headers, params={"q": f"isrc:{code}", "type": "track", "limit": 1}, timeout=5)
+                        if sp_res.status_code == 200:
+                            itms = sp_res.json().get("tracks", {}).get("items", [])
+                            if itms:
+                                resolved_uris.append(itms[0]["uri"])
+                    except Exception:
+                        pass
+
+        if not resolved_uris:
             return {"success": False, "error": "No valid Spotify track matches found to add to playlist."}
 
         # 1. Create Playlist using /me/playlists (modern endpoint)
@@ -315,8 +379,8 @@ class SpotifyProvider(BaseProvider):
         # 2. Add tracks in batches of 100 using /items endpoint with fallback to /tracks
         total_added = 0
         batch_size = 100
-        for i in range(0, len(valid_uris), batch_size):
-            batch = valid_uris[i:i + batch_size]
+        for i in range(0, len(resolved_uris), batch_size):
+            batch = resolved_uris[i:i + batch_size]
             
             # Try /items endpoint first (2026 modern spec)
             add_resp = requests.post(

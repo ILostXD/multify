@@ -1708,11 +1708,10 @@
 
             if (resp.status === 429) {
               const data = await resp.json().catch(() => ({}));
-              const wait = data.retry_after || 30;
+              const wait = Math.min(data.retry_after || 5, 5);
               setRateLimits(prev => ({ ...prev, [provider]: wait }));
               await delay(wait * 1000);
               setRateLimits(prev => ({ ...prev, [provider]: null }));
-              i--;
               continue;
             }
 

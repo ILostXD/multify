@@ -9,7 +9,7 @@ DEEZER_TRACK_URL = "https://api.deezer.com/track"
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 SONGLINK_API_URL = "https://api.song.link/v1-alpha.1/links"
 
-# In-memory LRU-like caches
+# In-memory LRU caches
 _ISRC_CACHE: Dict[str, Optional[str]] = {}
 _SONGLINK_CACHE: Dict[str, Dict[str, Any]] = {}
 _RESOLVER_CACHE: Dict[str, Any] = {}
@@ -28,6 +28,14 @@ def _clean_string(s: str) -> str:
     s = re.sub(r"\s+(?:feat|ft)\.?\s+.*$", "", s, flags=re.IGNORECASE)
     # Normalize whitespace
     return re.sub(r"\s+", " ", s).strip()
+
+
+def extract_primary_artist(artist: str) -> str:
+    """Extracts the first primary artist from multi-artist tags separated by •, /, ;, ,, &, feat, ft."""
+    if not artist:
+        return ""
+    parts = re.split(r"\s*(?:[•/;,]|(?:\s+&\s+)|\s+(?:feat|ft|vs|with)\.?\s+)\s*", artist, flags=re.IGNORECASE)
+    return parts[0].strip() if parts else artist.strip()
 
 
 def _similarity(a: str, b: str) -> float:
@@ -49,70 +57,91 @@ class SmartResolver:
         """
         clean_art = _clean_string(artist)
         clean_tit = _clean_string(title)
+        primary_art = extract_primary_artist(clean_art)
         cache_key = f"{clean_art.lower()}:::{clean_tit.lower()}"
 
         if cache_key in _ISRC_CACHE and _ISRC_CACHE[cache_key]:
-            return {"isrc": _ISRC_CACHE[cache_key], "artist": clean_art, "title": clean_tit}
+            return {"isrc": _ISRC_CACHE[cache_key], "artist": clean_art, "title": clean_tit, "primary_artist": primary_art}
 
         result: Dict[str, Any] = {
             "isrc": None,
             "artist": clean_art,
+            "primary_artist": primary_art,
             "title": clean_tit,
             "album": album,
             "artwork_url": "",
             "preview_url": "",
             "deezer_id": None,
-            "itunes_url": None
+            "itunes_url": None,
+            "duration_ms": 0
         }
 
-        # 1. Query Deezer Open API
-        try:
-            q = f"{clean_art} {clean_tit}".strip()
-            resp = requests.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 4}, timeout=4)
-            if resp.status_code == 200:
-                data = resp.json()
-                tracks = data.get("data", [])
-                for trk in tracks:
-                    dz_title = trk.get("title", "")
-                    dz_artist = trk.get("artist", {}).get("name", "")
-                    # Match confidence
-                    sim_title = _similarity(clean_tit, dz_title)
-                    sim_artist = _similarity(clean_art, dz_artist)
-                    if (sim_title > 0.6 and sim_artist > 0.5) or (clean_art.lower() in dz_artist.lower() and sim_title > 0.5):
-                        dz_id = trk.get("id")
-                        if dz_id:
-                            result["deezer_id"] = dz_id
-                            # Fetch full track metadata for ISRC
-                            t_resp = requests.get(f"{DEEZER_TRACK_URL}/{dz_id}", timeout=4)
-                            if t_resp.status_code == 200:
-                                t_data = t_resp.json()
-                                isrc = t_data.get("isrc")
-                                if isrc:
-                                    result["isrc"] = isrc
-                                    result["artwork_url"] = t_data.get("album", {}).get("cover_big") or trk.get("album", {}).get("cover_medium", "")
-                                    result["preview_url"] = t_data.get("preview", "")
-                                    _ISRC_CACHE[cache_key] = isrc
-                                    return result
-        except Exception:
-            pass
+        # 1. Query Deezer Open API (Try clean artist first, then primary artist)
+        queries_to_try = [f"{clean_art} {clean_tit}".strip()]
+        if primary_art and primary_art != clean_art:
+            queries_to_try.append(f"{primary_art} {clean_tit}".strip())
 
-        # 2. Query iTunes Search API (fallback for artwork/preview)
-        try:
-            q = f"{clean_art} {clean_tit}".strip()
-            resp = requests.get(ITUNES_SEARCH_URL, params={"term": q, "entity": "song", "limit": 3}, timeout=4)
-            if resp.status_code == 200:
-                data = resp.json()
-                results = data.get("results", [])
-                if results:
-                    top = results[0]
-                    result["itunes_url"] = top.get("trackViewUrl")
-                    if not result["artwork_url"]:
-                        art = top.get("artworkUrl100", "")
-                        result["artwork_url"] = art.replace("100x100bb.jpg", "600x600bb.jpg") if art else ""
-                    if not result["preview_url"]:
-                        result["preview_url"] = top.get("previewUrl", "")
-        except Exception:
-            pass
+        for q in queries_to_try:
+            try:
+                resp = requests.get(DEEZER_SEARCH_URL, params={"q": q, "limit": 4}, timeout=4)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    tracks = data.get("data", [])
+                    for trk in tracks:
+                        dz_title = trk.get("title", "")
+                        dz_artist = trk.get("artist", {}).get("name", "")
+                        sim_title = _similarity(clean_tit, dz_title)
+                        sim_artist = max(_similarity(clean_art, dz_artist), _similarity(primary_art, dz_artist))
+                        
+                        if (sim_title > 0.55 and sim_artist > 0.45) or (primary_art.lower() in dz_artist.lower() and sim_title > 0.5):
+                            dz_id = trk.get("id")
+                            if dz_id:
+                                result["deezer_id"] = dz_id
+                                result["artist"] = dz_artist
+                                result["title"] = dz_title
+                                result["duration_ms"] = int(trk.get("duration", 0) * 1000)
+                                # Fetch full track metadata for ISRC
+                                t_resp = requests.get(f"{DEEZER_TRACK_URL}/{dz_id}", timeout=4)
+                                if t_resp.status_code == 200:
+                                    t_data = t_resp.json()
+                                    isrc = t_data.get("isrc")
+                                    if isrc:
+                                        result["isrc"] = isrc
+                                        result["artwork_url"] = t_data.get("album", {}).get("cover_big") or trk.get("album", {}).get("cover_medium", "")
+                                        result["preview_url"] = t_data.get("preview", "")
+                                        _ISRC_CACHE[cache_key] = isrc
+                                        return result
+            except Exception:
+                pass
+
+        # 2. Query iTunes Search API (fallback for ISRC/artwork/preview)
+        itunes_queries = [f"{clean_art} {clean_tit}".strip()]
+        if primary_art and primary_art != clean_art:
+            itunes_queries.append(f"{primary_art} {clean_tit}".strip())
+
+        for q in itunes_queries:
+            try:
+                resp = requests.get(ITUNES_SEARCH_URL, params={"term": q, "entity": "song", "limit": 3}, timeout=4)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("results", [])
+                    if results:
+                        top = results[0]
+                        result["itunes_url"] = top.get("trackViewUrl")
+                        if not result["artist"]:
+                            result["artist"] = top.get("artistName", clean_art)
+                        if not result["title"]:
+                            result["title"] = top.get("trackName", clean_tit)
+                        if not result["duration_ms"]:
+                            result["duration_ms"] = int(top.get("trackTimeMillis", 0))
+                        if not result["artwork_url"]:
+                            art = top.get("artworkUrl100", "")
+                            result["artwork_url"] = art.replace("100x100bb.jpg", "600x600bb.jpg") if art else ""
+                        if not result["preview_url"]:
+                            result["preview_url"] = top.get("previewUrl", "")
+                        break
+            except Exception:
+                pass
 
         _ISRC_CACHE[cache_key] = result.get("isrc")
         return result

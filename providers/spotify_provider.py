@@ -11,6 +11,8 @@ from resolvers.smart_resolver import SmartResolver, extract_artist_variations, e
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
+SPOTIFY_TRACK_URI_RE = re.compile(r"^spotify:track:[0-9a-zA-Z]{22}$")
+SPOTIFY_EPISODE_URI_RE = re.compile(r"^spotify:episode:[0-9a-zA-Z]{22}$")
 
 _ISRC_TO_SPOTIFY_CACHE: Dict[str, str] = {}
 
@@ -308,13 +310,11 @@ class SpotifyProvider(BaseProvider):
             tit = (obj.get("title") or obj.get("name") or "").strip()
             alb = (obj.get("album") or obj.get("target_album") or "").strip()
 
-            if u.startswith("spotify:track:") and len(u) == 36 and "_" not in u and not u[14:].isupper():
-                direct_uris.append(u)
-            elif u.startswith("spotify:episode:"):
+            if (SPOTIFY_TRACK_URI_RE.match(u) or SPOTIFY_EPISODE_URI_RE.match(u)):
                 direct_uris.append(u)
             else:
                 clean_code = isrc or u.replace("spotify:track:", "").replace("isrc:", "").strip()
-                if clean_code.startswith("deezer_") or clean_code.startswith("itunes_"):
+                if clean_code.startswith("deezer_") or clean_code.startswith("itunes_") or len(clean_code) > 15:
                     clean_code = ""
                 items_to_resolve.append({
                     "isrc": clean_code,
@@ -336,89 +336,97 @@ class SpotifyProvider(BaseProvider):
                 return _ISRC_TO_SPOTIFY_CACHE[cache_key]
 
             if isrc:
-                for attempt in range(3):
-                    try:
-                        sp_res = requests.get(
-                            f"{SPOTIFY_API_BASE}/search",
-                            headers=headers,
-                            params={"q": f"isrc:{isrc}", "type": "track", "limit": 10},
-                            timeout=5
-                        )
-                        if sp_res.status_code == 200:
-                            itms = sp_res.json().get("tracks", {}).get("items", [])
-                            if itms:
-                                best = pick_best_spotify_item(itms, art, tit, alb)
-                                if best:
-                                    sp_uri = best["uri"]
-                                    _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
-                                    return sp_uri
-                            break
-                        elif sp_res.status_code == 429:
-                            wait = int(sp_res.headers.get("Retry-After", "2"))
-                            time.sleep(wait + 0.2)
-                        else:
-                            break
-                    except Exception:
-                        time.sleep(0.3)
+                try:
+                    sp_res = requests.get(
+                        f"{SPOTIFY_API_BASE}/search",
+                        headers=headers,
+                        params={"q": f"isrc:{isrc}", "type": "track", "limit": 10},
+                        timeout=3
+                    )
+                    if sp_res.status_code == 200:
+                        itms = sp_res.json().get("tracks", {}).get("items", [])
+                        if itms:
+                            best = pick_best_spotify_item(itms, art, tit, alb)
+                            if best and best.get("uri"):
+                                sp_uri = best["uri"]
+                                _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
+                                return sp_uri
+                except Exception:
+                    pass
 
             text_q = query or f"{art} {tit}".strip()
             if text_q:
-                for attempt in range(3):
-                    try:
-                        sp_res = requests.get(
-                            f"{SPOTIFY_API_BASE}/search",
-                            headers=headers,
-                            params={"q": text_q, "type": "track", "limit": 10},
-                            timeout=5
-                        )
-                        if sp_res.status_code == 200:
-                            itms = sp_res.json().get("tracks", {}).get("items", [])
-                            if itms:
-                                best = pick_best_spotify_item(itms, art, tit, alb)
-                                if best:
-                                    sp_uri = best["uri"]
-                                    _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
-                                    return sp_uri
-                            break
-                        elif sp_res.status_code == 429:
-                            wait = int(sp_res.headers.get("Retry-After", "2"))
-                            time.sleep(wait + 0.2)
-                        else:
-                            break
-                    except Exception:
-                        time.sleep(0.3)
+                try:
+                    sp_res = requests.get(
+                        f"{SPOTIFY_API_BASE}/search",
+                        headers=headers,
+                        params={"q": text_q, "type": "track", "limit": 10},
+                        timeout=3
+                    )
+                    if sp_res.status_code == 200:
+                        itms = sp_res.json().get("tracks", {}).get("items", [])
+                        if itms:
+                            best = pick_best_spotify_item(itms, art, tit, alb)
+                            if best and best.get("uri"):
+                                sp_uri = best["uri"]
+                                _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
+                                return sp_uri
+                except Exception:
+                    pass
 
             return None
 
         if items_to_resolve:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 results = list(executor.map(resolve_single, items_to_resolve))
                 for sp_uri in results:
-                    if sp_uri:
+                    if sp_uri and (SPOTIFY_TRACK_URI_RE.match(sp_uri) or SPOTIFY_EPISODE_URI_RE.match(sp_uri)):
                         direct_uris.append(sp_uri)
 
-        if not direct_uris:
+        # Deduplicate while preserving order
+        unique_uris = []
+        for u in direct_uris:
+            if u and u not in unique_uris and (SPOTIFY_TRACK_URI_RE.match(u) or SPOTIFY_EPISODE_URI_RE.match(u)):
+                unique_uris.append(u)
+
+        if not unique_uris:
             return {"success": True, "added_count": 0}
 
-        # Deduplicate while preserving order
-        unique_uris = list(dict.fromkeys(direct_uris))
+        # Add to Spotify playlist (support both /items and /tracks with auto-refresh)
+        endpoints = [
+            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
+            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks"
+        ]
 
-        # Add to Spotify playlist
-        try:
-            add_resp = requests.post(
-                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
-                headers={**headers, "Content-Type": "application/json"},
-                json={"uris": unique_uris},
-                timeout=15
-            )
-            if add_resp.status_code in (200, 201):
-                return {"success": True, "added_count": len(unique_uris)}
-            else:
-                print(f"[Spotify] Add tracks error ({add_resp.status_code}): {add_resp.text}", file=sys.stderr, flush=True)
-                return {"success": False, "error": f"Failed to add tracks: {add_resp.text}"}
-        except Exception as e:
-            print(f"[Spotify] Error adding tracks: {e}", file=sys.stderr, flush=True)
-            return {"success": False, "error": str(e)}
+        add_resp = None
+        for ep in endpoints:
+            for attempt in range(2):
+                try:
+                    add_resp = requests.post(
+                        ep,
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={"uris": unique_uris},
+                        timeout=10
+                    )
+                    if add_resp.status_code in (200, 201):
+                        return {"success": True, "added_count": len(unique_uris)}
+                    elif add_resp.status_code == 401 and attempt == 0:
+                        session_data["token_expires_at"] = 0
+                        config["spotify_token_expires_at"] = 0
+                        new_token = self._get_fresh_token(config, session_data)
+                        if new_token:
+                            headers = {"Authorization": f"Bearer {new_token}"}
+                            continue
+                except Exception as e:
+                    print(f"[Spotify] Error posting to {ep}: {e}", file=sys.stderr, flush=True)
+
+        if add_resp is not None and add_resp.status_code in (200, 201):
+            return {"success": True, "added_count": len(unique_uris)}
+        else:
+            status = add_resp.status_code if add_resp else 500
+            err_body = add_resp.text if add_resp else "No response"
+            print(f"[Spotify] Add tracks failed ({status}): {err_body}", file=sys.stderr, flush=True)
+            return {"success": False, "error": f"Failed to add tracks: {err_body}"}
 
     def create_playlist(self, name: str, track_uris: List[str], config: Dict[str, Any], session_data: Dict[str, Any], track_objects: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         init_res = self.init_playlist(name, config, session_data)

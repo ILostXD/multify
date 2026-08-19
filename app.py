@@ -612,15 +612,20 @@ def create_playlist_route():
     provider_name = data.get("provider", "spotify").lower()
     name = data.get("name", "Imported Playlist")
     uris = data.get("uris", [])
+    tracks = data.get("tracks", [])
 
-    if not uris:
+    if not uris and not tracks:
         return jsonify({"error": "No tracks selected"}), 400
 
     cfg = load_config()
     sess_dict = dict(session)
     prov = get_provider(provider_name)
 
-    res = prov.create_playlist(name, uris, cfg, sess_dict)
+    if provider_name == "spotify":
+        res = prov.create_playlist(name, uris, cfg, sess_dict, track_objects=tracks)
+    else:
+        res = prov.create_playlist(name, uris, cfg, sess_dict)
+
     if not res.get("success"):
         return jsonify({"error": res.get("error", "Playlist creation failed.")}), 400
 

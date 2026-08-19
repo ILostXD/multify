@@ -1963,9 +1963,22 @@
       }, [selectedProvider]);
 
       const handleCreatePlaylist = async () => {
-        const uris = tracks
-          .map(t => t.providers?.[selectedProvider]?.selectedUri)
-          .filter(u => u && u !== 'skip');
+        const selectedTrackObjs = tracks
+          .map(t => {
+            const pData = (t.providers && t.providers[selectedProvider]) || {};
+            if (!pData.selectedUri || pData.selectedUri === 'skip') return null;
+            const cand = (pData.candidates || []).find(c => (c.uri === pData.selectedUri || c.id === pData.selectedUri)) || {};
+            return {
+              artist: t.artist,
+              title: t.title,
+              album: t.album,
+              uri: pData.selectedUri,
+              isrc: cand.isrc || (pData.selectedUri.startsWith('spotify:track:') ? pData.selectedUri.replace('spotify:track:', '') : null)
+            };
+          })
+          .filter(Boolean);
+
+        const uris = selectedTrackObjs.map(t => t.uri);
 
         if (uris.length === 0) {
           alert(`No valid matches selected for ${selectedProvider.toUpperCase()} to add to playlist.`);
@@ -1979,7 +1992,12 @@
           const resp = await fetch('/create_playlist', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider: selectedProvider, name: playlistName, uris })
+            body: JSON.stringify({
+              provider: selectedProvider,
+              name: (playlistName || 'Imported Playlist').trim(),
+              uris,
+              tracks: selectedTrackObjs
+            })
           });
 
           const data = await resp.json();

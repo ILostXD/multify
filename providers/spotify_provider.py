@@ -15,6 +15,67 @@ SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 _ISRC_TO_SPOTIFY_CACHE: Dict[str, str] = {}
 
 
+def pick_best_spotify_item(items: List[Dict[str, Any]], target_artist: str = "", target_title: str = "", target_album: str = "") -> Optional[Dict[str, Any]]:
+    """Select the best matching track from Spotify candidates, penalizing random compilations in favor of studio albums/singles."""
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+
+    def score_item(itm: Dict[str, Any]) -> float:
+        pop = itm.get("popularity", 50) or 50
+        score = float(pop)
+        
+        album = itm.get("album", {}) or {}
+        alb_type = (album.get("album_type") or "").lower()
+        alb_name = (album.get("name") or "").lower()
+        alb_artists = [a.get("name", "").lower() for a in album.get("artists", []) if a.get("name")]
+        
+        t_art = (target_artist or "").lower()
+        t_tit = (target_title or "").lower()
+        t_alb = (target_album or "").lower()
+        
+        # 1. Heavily penalize compilations & compilation buzzwords
+        if alb_type == "compilation":
+            score -= 80.0
+        
+        compilation_keywords = [
+            "viral", "tiktok", "hits", "compilation", "best of", "summer", "workout", 
+            "star rap", "hyperwave", "top 50", "top 100", "various artists", "party hits",
+            "gym", "driving", "throwback", "autumn", "winter", "spring", "vibes 202",
+            "greatest hits", "top hits", "soundtrack", "ost", "lofi hits", "car music"
+        ]
+        if any(kw in alb_name for kw in compilation_keywords):
+            score -= 70.0
+        if any("various" in a for a in alb_artists):
+            score -= 60.0
+
+        # 2. Reward studio albums & singles
+        if alb_type == "album":
+            score += 40.0
+        elif alb_type == "single":
+            score += 25.0
+            
+        # 3. Reward artist match on album
+        if any(t_art in a or a in t_art for a in alb_artists if a):
+            score += 50.0
+        elif t_art and alb_artists:
+            first_art = t_art.split(",")[0].strip()
+            if any(first_art in a or a in first_art for a in alb_artists if a):
+                score += 45.0
+
+        # 4. Reward target album match
+        if t_alb and len(t_alb) > 2:
+            if t_alb == alb_name:
+                score += 100.0
+            elif t_alb in alb_name or alb_name in t_alb:
+                score += 70.0
+
+        return score
+
+    return max(items, key=score_item)
+
+
 class SpotifyProvider(BaseProvider):
     name = "spotify"
     display_name = "Spotify"
@@ -231,66 +292,6 @@ class SpotifyProvider(BaseProvider):
             "playlist_name": name
         }
 
-
-def pick_best_spotify_item(items: List[Dict[str, Any]], target_artist: str = "", target_title: str = "", target_album: str = "") -> Optional[Dict[str, Any]]:
-    """Select the best matching track from Spotify candidates, penalizing random compilations in favor of studio albums/singles."""
-    if not items:
-        return None
-    if len(items) == 1:
-        return items[0]
-
-    def score_item(itm: Dict[str, Any]) -> float:
-        pop = itm.get("popularity", 50) or 50
-        score = float(pop)
-        
-        album = itm.get("album", {}) or {}
-        alb_type = (album.get("album_type") or "").lower()
-        alb_name = (album.get("name") or "").lower()
-        alb_artists = [a.get("name", "").lower() for a in album.get("artists", []) if a.get("name")]
-        
-        t_art = (target_artist or "").lower()
-        t_tit = (target_title or "").lower()
-        t_alb = (target_album or "").lower()
-        
-        # 1. Heavily penalize compilations & compilation buzzwords
-        if alb_type == "compilation":
-            score -= 80.0
-        
-        compilation_keywords = [
-            "viral", "tiktok", "hits", "compilation", "best of", "summer", "workout", 
-            "star rap", "hyperwave", "top 50", "top 100", "various artists", "party hits",
-            "gym", "driving", "throwback", "autumn", "winter", "spring", "vibes 202",
-            "greatest hits", "top hits", "soundtrack", "ost", "lofi hits", "car music"
-        ]
-        if any(kw in alb_name for kw in compilation_keywords):
-            score -= 70.0
-        if any("various" in a for a in alb_artists):
-            score -= 60.0
-
-        # 2. Reward studio albums & singles
-        if alb_type == "album":
-            score += 40.0
-        elif alb_type == "single":
-            score += 25.0
-            
-        # 3. Reward artist match on album
-        if any(t_art in a or a in t_art for a in alb_artists if a):
-            score += 50.0
-        elif t_art and alb_artists:
-            first_art = t_art.split(",")[0].strip()
-            if any(first_art in a or a in first_art for a in alb_artists if a):
-                score += 45.0
-
-        # 4. Reward target album match
-        if t_alb and len(t_alb) > 2:
-            if t_alb == alb_name:
-                score += 100.0
-            elif t_alb in alb_name or alb_name in t_alb:
-                score += 70.0
-
-        return score
-
-    return max(items, key=score_item)
 
     def add_batch_to_playlist(self, playlist_id: str, track_objects: List[Dict[str, Any]], config: Dict[str, Any], session_data: Dict[str, Any]) -> Dict[str, Any]:
         headers = self.get_auth_header(config, session_data)

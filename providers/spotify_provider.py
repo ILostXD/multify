@@ -123,49 +123,89 @@ class SpotifyProvider(BaseProvider):
         if not headers:
             return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
-        payloads_to_try = [
+        # 1. Fetch current user ID
+        user_id = None
+        for attempt in range(2):
+            try:
+                me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=8)
+                if me_resp.status_code == 200:
+                    user_id = me_resp.json().get("id")
+                    break
+                elif me_resp.status_code == 401 and attempt == 0:
+                    # Token expired -> force refresh
+                    session_data["token_expires_at"] = 0
+                    config["spotify_token_expires_at"] = 0
+                    new_token = self._get_fresh_token(config, session_data)
+                    if new_token:
+                        headers = {"Authorization": f"Bearer {new_token}"}
+                        continue
+                else:
+                    print(f"[Spotify] /me returned {me_resp.status_code}: {me_resp.text}", file=sys.stderr, flush=True)
+                    if me_resp.status_code == 403:
+                        return {
+                            "success": False,
+                            "error": (
+                                "Spotify 403 Forbidden. Your Spotify account is not registered under 'User Management' "
+                                "in the Spotify Developer Dashboard (developer.spotify.com/dashboard), or permissions are restricted. "
+                                "Please add your Spotify email to User Management or re-login in Settings."
+                            )
+                        }
+                    elif me_resp.status_code == 401:
+                        return {"success": False, "error": "Spotify session expired. Please click Re-login to Spotify in Settings."}
+            except Exception as e:
+                print(f"[Spotify] Error fetching /me: {e}", file=sys.stderr, flush=True)
+
+        payloads = [
             {"name": name, "public": False, "description": "Imported via Multify"},
             {"name": name, "public": True, "description": "Imported via Multify"},
             {"name": name, "description": "Imported via Multify"}
         ]
 
         create_resp = None
-        for payload in payloads_to_try:
-            try:
-                create_resp = requests.post(
-                    f"{SPOTIFY_API_BASE}/me/playlists",
-                    headers={**headers, "Content-Type": "application/json"},
-                    json=payload,
-                    timeout=10
-                )
-                if create_resp.status_code in (200, 201):
-                    break
-            except Exception:
-                pass
+        # Try /users/{user_id}/playlists first if user_id is known
+        if user_id:
+            for p in payloads:
+                try:
+                    create_resp = requests.post(
+                        f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json=p,
+                        timeout=10
+                    )
+                    if create_resp.status_code in (200, 201):
+                        break
+                except Exception as e:
+                    print(f"[Spotify] Error creating playlist via /users: {e}", file=sys.stderr, flush=True)
 
+        # Fallback to /me/playlists
         if not create_resp or create_resp.status_code not in (200, 201):
-            try:
-                me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=8)
-                if me_resp.status_code == 200:
-                    user_id = me_resp.json().get("id")
-                    if user_id:
-                        create_resp = requests.post(
-                            f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
-                            headers={**headers, "Content-Type": "application/json"},
-                            json={"name": name, "public": False, "description": "Imported via Multify"},
-                            timeout=10
-                        )
-            except Exception:
-                pass
+            for p in payloads:
+                try:
+                    create_resp = requests.post(
+                        f"{SPOTIFY_API_BASE}/me/playlists",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json=p,
+                        timeout=10
+                    )
+                    if create_resp.status_code in (200, 201):
+                        break
+                except Exception as e:
+                    print(f"[Spotify] Error creating playlist via /me: {e}", file=sys.stderr, flush=True)
 
         if not create_resp or create_resp.status_code not in (200, 201):
             status_code = create_resp.status_code if create_resp else 500
+            err_text = create_resp.text if create_resp else "No response from Spotify"
+            print(f"[Spotify] Create playlist failed ({status_code}): {err_text}", file=sys.stderr, flush=True)
+
             err_msg = ""
             try:
                 err_data = create_resp.json().get("error", {})
-                err_msg = err_data.get("message", create_resp.text if create_resp else "Unknown error")
+                if isinstance(err_data, dict):
+                    err_msg = err_data.get("message") or err_text
+                else:
+                    err_msg = str(err_data) or err_text
             except Exception:
-                err_msg = create_resp.text if create_resp else "Unknown error"
+                err_msg = err_text
 
             if status_code == 403:
                 return {

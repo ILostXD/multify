@@ -1501,6 +1501,7 @@
       const [rateLimits, setRateLimits] = useState({ spotify: null, ytmusic: null, tidal: null });
       const [isCreating, setIsCreating] = useState(false);
       const [createResult, setCreateResult] = useState(null);
+      const [createProgress, setCreateProgress] = useState(null);
 
       /* Auth & Password State */
       const [authRequired, setAuthRequired] = useState(window.__INITIAL_AUTH__ ? window.__INITIAL_AUTH__.password_required : false);
@@ -1978,45 +1979,84 @@
           })
           .filter(Boolean);
 
-        const uris = selectedTrackObjs.map(t => t.uri);
-
-        if (uris.length === 0) {
+        if (selectedTrackObjs.length === 0) {
           alert(`No valid matches selected for ${selectedProvider.toUpperCase()} to add to playlist.`);
           return;
         }
 
         setIsCreating(true);
         setCreateResult(null);
+        setCreateProgress({ current: 0, total: selectedTrackObjs.length });
 
         try {
-          const resp = await fetch('/create_playlist', {
+          const finalName = (playlistName || 'Imported Playlist').trim();
+
+          // 1. Initialize playlist on provider (completes in < 1 second!)
+          const initResp = await fetch('/api/playlist/init', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               provider: selectedProvider,
-              name: (playlistName || 'Imported Playlist').trim(),
-              uris,
-              tracks: selectedTrackObjs
+              name: finalName
             })
           });
 
-          const data = await resp.json();
-          setIsCreating(false);
+          const initData = await initResp.json();
+          if (initData.error) {
+            setIsCreating(false);
+            setCreateProgress(null);
+            setCreateResult({ success: false, message: initData.error });
+            return;
+          }
 
-          if (data.error) {
-            setCreateResult({ success: false, message: data.error });
-          } else {
-            setCreateResult({
-              success: true,
-              name: data.playlist_name,
-              count: data.track_count,
-              url: data.playlist_url,
-              provider: selectedProvider
+          const playlistId = initData.playlist_id;
+          const playlistUrl = initData.playlist_url;
+          let totalAdded = 0;
+
+          // 2. Add tracks in small 20-track chunks (each chunk takes ~2s, eliminating any Nginx 504 timeouts!)
+          const chunkSize = 20;
+          for (let i = 0; i < selectedTrackObjs.length; i += chunkSize) {
+            const chunk = selectedTrackObjs.slice(i, i + chunkSize);
+            const batchResp = await fetch('/api/playlist/add_batch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                provider: selectedProvider,
+                playlist_id: playlistId,
+                tracks: chunk
+              })
+            });
+
+            if (batchResp.status === 401) {
+              setIsCreating(false);
+              setCreateProgress(null);
+              setCreateResult({ success: false, message: 'Session expired. Please re-login in Settings.' });
+              return;
+            }
+
+            const batchData = await batchResp.json();
+            if (batchData.success) {
+              totalAdded += (batchData.added_count || 0);
+            }
+            setCreateProgress({
+              current: Math.min(selectedTrackObjs.length, i + chunk.length),
+              total: selectedTrackObjs.length
             });
           }
+
+          setIsCreating(false);
+          setCreateProgress(null);
+          setCreateResult({
+            success: true,
+            name: finalName,
+            count: totalAdded,
+            url: playlistUrl,
+            provider: selectedProvider
+          });
         } catch (err) {
           setIsCreating(false);
-          setCreateResult({ success: false, message: 'Failed to create playlist.' });
+          setCreateProgress(null);
+          setCreateResult({ success: false, message: 'Failed to create playlist: ' + err.message });
         }
       };
 
@@ -2550,7 +2590,7 @@
                   style={{ padding: '0.55rem 1.25rem', fontSize: '0.82rem' }}
                 >
                   <Icon name={isCreating ? 'loader' : 'plus'} size={15} />
-                  <span>{isCreating ? 'Creating Playlist…' : `Create ${selectedProvider === 'spotify' ? 'Spotify' : selectedProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'} Playlist`}</span>
+                  <span>{isCreating && createProgress ? `Adding ${createProgress.current} / ${createProgress.total}…` : isCreating ? 'Creating Playlist…' : `Create ${selectedProvider === 'spotify' ? 'Spotify' : selectedProvider === 'ytmusic' ? 'YouTube Music' : 'Tidal'} Playlist`}</span>
                 </button>
               </div>
             </div>

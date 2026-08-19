@@ -118,70 +118,118 @@ class SpotifyProvider(BaseProvider):
 
         return results[:8], None
 
-    def create_playlist(self, name: str, track_uris: List[str], config: Dict[str, Any], session_data: Dict[str, Any], track_objects: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    def init_playlist(self, name: str, config: Dict[str, Any], session_data: Dict[str, Any]) -> Dict[str, Any]:
         headers = self.get_auth_header(config, session_data)
         if not headers:
             return {"success": False, "error": "Not authenticated with Spotify. Please re-login in Settings."}
 
+        payloads_to_try = [
+            {"name": name, "public": False, "description": "Imported via Multify"},
+            {"name": name, "public": True, "description": "Imported via Multify"},
+            {"name": name, "description": "Imported via Multify"}
+        ]
+
+        create_resp = None
+        for payload in payloads_to_try:
+            try:
+                create_resp = requests.post(
+                    f"{SPOTIFY_API_BASE}/me/playlists",
+                    headers={**headers, "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=10
+                )
+                if create_resp.status_code in (200, 201):
+                    break
+            except Exception:
+                pass
+
+        if not create_resp or create_resp.status_code not in (200, 201):
+            try:
+                me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=8)
+                if me_resp.status_code == 200:
+                    user_id = me_resp.json().get("id")
+                    if user_id:
+                        create_resp = requests.post(
+                            f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
+                            headers={**headers, "Content-Type": "application/json"},
+                            json={"name": name, "public": False, "description": "Imported via Multify"},
+                            timeout=10
+                        )
+            except Exception:
+                pass
+
+        if not create_resp or create_resp.status_code not in (200, 201):
+            status_code = create_resp.status_code if create_resp else 500
+            err_msg = ""
+            try:
+                err_data = create_resp.json().get("error", {})
+                err_msg = err_data.get("message", create_resp.text if create_resp else "Unknown error")
+            except Exception:
+                err_msg = create_resp.text if create_resp else "Unknown error"
+
+            if status_code == 403:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Spotify 403 Forbidden ({err_msg}). "
+                        "If your Spotify Developer App is in Development Mode, please add your Spotify account email "
+                        "under 'User Management' in the Spotify Developer Dashboard (developer.spotify.com/dashboard), "
+                        "or re-login to Spotify in Settings."
+                    )
+                }
+            elif status_code == 401:
+                return {"success": False, "error": "Spotify session expired (401). Please click Re-login to Spotify in Settings."}
+            else:
+                return {"success": False, "error": f"Failed to create Spotify playlist ({status_code}): {err_msg}"}
+
+        pdata = create_resp.json()
+        return {
+            "success": True,
+            "playlist_id": pdata.get("id"),
+            "playlist_url": pdata.get("external_urls", {}).get("spotify", ""),
+            "playlist_name": name
+        }
+
+    def add_batch_to_playlist(self, playlist_id: str, track_objects: List[Dict[str, Any]], config: Dict[str, Any], session_data: Dict[str, Any]) -> Dict[str, Any]:
+        headers = self.get_auth_header(config, session_data)
+        if not headers:
+            return {"success": False, "error": "Not authenticated with Spotify."}
+
         direct_uris = []
         items_to_resolve = []
 
-        # 1. Parse incoming track selections
-        if track_objects:
-            for obj in track_objects:
-                u = (obj.get("uri") or "").strip()
-                isrc = (obj.get("isrc") or "").strip()
-                art = (obj.get("artist") or obj.get("artists") or "").strip()
-                tit = (obj.get("title") or obj.get("name") or "").strip()
+        for obj in track_objects:
+            u = (obj.get("uri") or "").strip()
+            isrc = (obj.get("isrc") or "").strip()
+            art = (obj.get("artist") or obj.get("artists") or "").strip()
+            tit = (obj.get("title") or obj.get("name") or "").strip()
 
-                if u.startswith("spotify:track:") and len(u) == 36 and "_" not in u and not u[14:].isupper():
-                    direct_uris.append(u)
-                elif u.startswith("spotify:episode:"):
-                    direct_uris.append(u)
-                else:
-                    clean_code = isrc or u.replace("spotify:track:", "").replace("isrc:", "").strip()
-                    if clean_code.startswith("deezer_") or clean_code.startswith("itunes_"):
-                        clean_code = ""
-                    items_to_resolve.append({
-                        "isrc": clean_code,
-                        "artist": art,
-                        "title": tit,
-                        "query": f"{art} {tit}".strip()
-                    })
-        else:
-            for u in track_uris:
-                if not u or not isinstance(u, str):
-                    continue
-                u = u.strip()
-                if u.startswith("spotify:track:") and len(u) == 36 and "_" not in u and not u[14:].isupper():
-                    direct_uris.append(u)
-                elif u.startswith("spotify:episode:"):
-                    direct_uris.append(u)
-                else:
-                    clean_code = u.replace("spotify:track:", "").replace("isrc:", "").strip()
-                    if clean_code.startswith("deezer_") or clean_code.startswith("itunes_"):
-                        clean_code = ""
-                    items_to_resolve.append({
-                        "isrc": clean_code,
-                        "artist": "",
-                        "title": "",
-                        "query": ""
-                    })
+            if u.startswith("spotify:track:") and len(u) == 36 and "_" not in u and not u[14:].isupper():
+                direct_uris.append(u)
+            elif u.startswith("spotify:episode:"):
+                direct_uris.append(u)
+            else:
+                clean_code = isrc or u.replace("spotify:track:", "").replace("isrc:", "").strip()
+                if clean_code.startswith("deezer_") or clean_code.startswith("itunes_"):
+                    clean_code = ""
+                items_to_resolve.append({
+                    "isrc": clean_code,
+                    "artist": art,
+                    "title": tit,
+                    "query": f"{art} {tit}".strip()
+                })
 
-        # 2. Parallel resolver with rate-limit retry & text fallback
         def resolve_single(item: Dict[str, str]) -> Optional[str]:
             isrc = item.get("isrc", "")
             query = item.get("query", "")
             art = item.get("artist", "")
             tit = item.get("title", "")
 
-            # Check cache
             if isrc and isrc in _ISRC_TO_SPOTIFY_CACHE:
                 return _ISRC_TO_SPOTIFY_CACHE[isrc]
             if query and query in _ISRC_TO_SPOTIFY_CACHE:
                 return _ISRC_TO_SPOTIFY_CACHE[query]
 
-            # Try ISRC on Spotify
             if isrc:
                 for attempt in range(3):
                     try:
@@ -197,18 +245,15 @@ class SpotifyProvider(BaseProvider):
                                 sp_uri = itms[0]["uri"]
                                 _ISRC_TO_SPOTIFY_CACHE[isrc] = sp_uri
                                 return sp_uri
-                            break # No ISRC match on Spotify, proceed to text search
+                            break
                         elif sp_res.status_code == 429:
                             wait = int(sp_res.headers.get("Retry-After", "2"))
                             time.sleep(wait + 0.2)
-                        elif sp_res.status_code == 401:
-                            return None
                         else:
                             break
                     except Exception:
                         time.sleep(0.3)
 
-            # Fallback to Text Search on Spotify
             text_q = query or f"{art} {tit}".strip()
             if text_q:
                 for attempt in range(3):
@@ -231,8 +276,6 @@ class SpotifyProvider(BaseProvider):
                         elif sp_res.status_code == 429:
                             wait = int(sp_res.headers.get("Retry-After", "2"))
                             time.sleep(wait + 0.2)
-                        elif sp_res.status_code == 401:
-                            return None
                         else:
                             break
                     except Exception:
@@ -240,7 +283,6 @@ class SpotifyProvider(BaseProvider):
 
             return None
 
-        # Resolve concurrently with controlled 6-worker pool
         if items_to_resolve:
             with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
                 results = list(executor.map(resolve_single, items_to_resolve))
@@ -248,7 +290,6 @@ class SpotifyProvider(BaseProvider):
                     if sp_uri:
                         direct_uris.append(sp_uri)
 
-        # Deduplicate while preserving playlist order
         seen_uris = set()
         resolved_uris = []
         for u in direct_uris:
@@ -257,96 +298,44 @@ class SpotifyProvider(BaseProvider):
                 resolved_uris.append(u)
 
         if not resolved_uris:
-            return {"success": False, "error": "No valid Spotify track matches found to add to playlist. Please re-login to Spotify in Settings."}
+            return {"success": True, "added_count": 0, "message": "No valid track matches in this chunk"}
 
-        payloads_to_try = [
-            {"name": name, "public": False, "description": "Imported via Multify"},
-            {"name": name, "public": True, "description": "Imported via Multify"},
-            {"name": name, "description": "Imported via Multify"}
-        ]
-
-        create_resp = None
-        for payload in payloads_to_try:
-            create_resp = requests.post(
-                f"{SPOTIFY_API_BASE}/me/playlists",
-                headers={**headers, "Content-Type": "application/json"},
-                json=payload,
-                timeout=12
-            )
-            if create_resp.status_code in (200, 201):
-                break
-
-        if not create_resp or create_resp.status_code not in (200, 201):
-            me_resp = requests.get(f"{SPOTIFY_API_BASE}/me", headers=headers, timeout=8)
-            if me_resp.status_code == 200:
-                user_id = me_resp.json().get("id")
-                if user_id:
-                    create_resp = requests.post(
-                        f"{SPOTIFY_API_BASE}/users/{user_id}/playlists",
-                        headers={**headers, "Content-Type": "application/json"},
-                        json={"name": name, "public": False, "description": "Imported via Multify"},
-                        timeout=12
-                    )
-
-        if not create_resp or create_resp.status_code not in (200, 201):
-            status_code = create_resp.status_code if create_resp else 500
-            err_msg = ""
-            try:
-                err_data = create_resp.json().get("error", {})
-                err_msg = err_data.get("message", create_resp.text if create_resp else "Unknown error")
-            except Exception:
-                err_msg = create_resp.text if create_resp else "Unknown error"
-
-            if status_code == 403:
-                return {
-                    "success": False,
-                    "error": (
-                        f"Spotify 403 Forbidden ({err_msg}). "
-                        "If your Spotify Developer App is in Development Mode, you MUST add your Spotify account email "
-                        "under 'User Management' in the Spotify Developer Dashboard (developer.spotify.com/dashboard), "
-                        "or re-login to Spotify in Settings."
-                    )
-                }
-            elif status_code == 401:
-                return {
-                    "success": False,
-                    "error": "Spotify session expired (401). Please click Re-login to Spotify in Settings."
-                }
-            else:
-                return {"success": False, "error": f"Failed to create Spotify playlist ({status_code}): {err_msg}"}
-
-        pdata = create_resp.json()
-        playlist_id = pdata.get("id")
-        playlist_url = pdata.get("external_urls", {}).get("spotify", "")
-
-        total_added = 0
-        batch_size = 100
-        for i in range(0, len(resolved_uris), batch_size):
-            batch = resolved_uris[i:i + batch_size]
+        add_resp = requests.post(
+            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
+            headers={**headers, "Content-Type": "application/json"},
+            json={"uris": resolved_uris},
+            timeout=15
+        )
+        if add_resp.status_code not in (200, 201):
             add_resp = requests.post(
-                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
+                f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
                 headers={**headers, "Content-Type": "application/json"},
-                json={"uris": batch},
+                json={"uris": resolved_uris},
                 timeout=15
             )
-            if add_resp.status_code not in (200, 201):
-                add_resp = requests.post(
-                    f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
-                    headers={**headers, "Content-Type": "application/json"},
-                    json={"uris": batch},
-                    timeout=15
-                )
 
-            if add_resp.status_code in (200, 201):
-                total_added += len(batch)
-            else:
-                return {
-                    "success": False,
-                    "error": f"Created playlist '{name}', but failed adding track batch: {add_resp.text}",
-                    "playlist_name": name,
-                    "playlist_url": playlist_url,
-                    "track_count": total_added
-                }
+        if add_resp.status_code in (200, 201):
+            return {"success": True, "added_count": len(resolved_uris)}
+        else:
+            return {"success": False, "error": f"Failed adding tracks to Spotify: {add_resp.text}"}
+
+    def create_playlist(self, name: str, track_uris: List[str], config: Dict[str, Any], session_data: Dict[str, Any], track_objects: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        init_res = self.init_playlist(name, config, session_data)
+        if not init_res.get("success"):
+            return init_res
+
+        playlist_id = init_res["playlist_id"]
+        playlist_url = init_res["playlist_url"]
+
+        items = track_objects or [{"uri": u} for u in track_uris]
+        total_added = 0
+
+        batch_size = 25
+        for i in range(0, len(items), batch_size):
+            chunk = items[i:i + batch_size]
+            batch_res = self.add_batch_to_playlist(playlist_id, chunk, config, session_data)
+            if batch_res.get("success"):
+                total_added += batch_res.get("added_count", 0)
 
         return {
             "success": True,

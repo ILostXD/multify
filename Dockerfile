@@ -11,4 +11,4 @@ COPY . .
 
 EXPOSE 5099
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5099", "--access-logfile", "-", "app:app"]
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5099", "--timeout", "120", "--access-logfile", "-", "app:app"]

@@ -231,6 +231,67 @@ class SpotifyProvider(BaseProvider):
             "playlist_name": name
         }
 
+
+def pick_best_spotify_item(items: List[Dict[str, Any]], target_artist: str = "", target_title: str = "", target_album: str = "") -> Optional[Dict[str, Any]]:
+    """Select the best matching track from Spotify candidates, penalizing random compilations in favor of studio albums/singles."""
+    if not items:
+        return None
+    if len(items) == 1:
+        return items[0]
+
+    def score_item(itm: Dict[str, Any]) -> float:
+        pop = itm.get("popularity", 50) or 50
+        score = float(pop)
+        
+        album = itm.get("album", {}) or {}
+        alb_type = (album.get("album_type") or "").lower()
+        alb_name = (album.get("name") or "").lower()
+        alb_artists = [a.get("name", "").lower() for a in album.get("artists", []) if a.get("name")]
+        
+        t_art = (target_artist or "").lower()
+        t_tit = (target_title or "").lower()
+        t_alb = (target_album or "").lower()
+        
+        # 1. Heavily penalize compilations & compilation buzzwords
+        if alb_type == "compilation":
+            score -= 80.0
+        
+        compilation_keywords = [
+            "viral", "tiktok", "hits", "compilation", "best of", "summer", "workout", 
+            "star rap", "hyperwave", "top 50", "top 100", "various artists", "party hits",
+            "gym", "driving", "throwback", "autumn", "winter", "spring", "vibes 202",
+            "greatest hits", "top hits", "soundtrack", "ost", "lofi hits", "car music"
+        ]
+        if any(kw in alb_name for kw in compilation_keywords):
+            score -= 70.0
+        if any("various" in a for a in alb_artists):
+            score -= 60.0
+
+        # 2. Reward studio albums & singles
+        if alb_type == "album":
+            score += 40.0
+        elif alb_type == "single":
+            score += 25.0
+            
+        # 3. Reward artist match on album
+        if any(t_art in a or a in t_art for a in alb_artists if a):
+            score += 50.0
+        elif t_art and alb_artists:
+            first_art = t_art.split(",")[0].strip()
+            if any(first_art in a or a in first_art for a in alb_artists if a):
+                score += 45.0
+
+        # 4. Reward target album match
+        if t_alb and len(t_alb) > 2:
+            if t_alb == alb_name:
+                score += 100.0
+            elif t_alb in alb_name or alb_name in t_alb:
+                score += 70.0
+
+        return score
+
+    return max(items, key=score_item)
+
     def add_batch_to_playlist(self, playlist_id: str, track_objects: List[Dict[str, Any]], config: Dict[str, Any], session_data: Dict[str, Any]) -> Dict[str, Any]:
         headers = self.get_auth_header(config, session_data)
         if not headers:
@@ -244,6 +305,7 @@ class SpotifyProvider(BaseProvider):
             isrc = (obj.get("isrc") or "").strip()
             art = (obj.get("artist") or obj.get("artists") or "").strip()
             tit = (obj.get("title") or obj.get("name") or "").strip()
+            alb = (obj.get("album") or obj.get("target_album") or "").strip()
 
             if u.startswith("spotify:track:") and len(u) == 36 and "_" not in u and not u[14:].isupper():
                 direct_uris.append(u)
@@ -257,6 +319,7 @@ class SpotifyProvider(BaseProvider):
                     "isrc": clean_code,
                     "artist": art,
                     "title": tit,
+                    "album": alb,
                     "query": f"{art} {tit}".strip()
                 })
 
@@ -265,11 +328,11 @@ class SpotifyProvider(BaseProvider):
             query = item.get("query", "")
             art = item.get("artist", "")
             tit = item.get("title", "")
+            alb = item.get("album", "")
 
-            if isrc and isrc in _ISRC_TO_SPOTIFY_CACHE:
-                return _ISRC_TO_SPOTIFY_CACHE[isrc]
-            if query and query in _ISRC_TO_SPOTIFY_CACHE:
-                return _ISRC_TO_SPOTIFY_CACHE[query]
+            cache_key = f"{isrc}_{alb}" if isrc else f"{query}_{alb}"
+            if cache_key in _ISRC_TO_SPOTIFY_CACHE:
+                return _ISRC_TO_SPOTIFY_CACHE[cache_key]
 
             if isrc:
                 for attempt in range(3):
@@ -277,15 +340,17 @@ class SpotifyProvider(BaseProvider):
                         sp_res = requests.get(
                             f"{SPOTIFY_API_BASE}/search",
                             headers=headers,
-                            params={"q": f"isrc:{isrc}", "type": "track", "limit": 1},
+                            params={"q": f"isrc:{isrc}", "type": "track", "limit": 10},
                             timeout=5
                         )
                         if sp_res.status_code == 200:
                             itms = sp_res.json().get("tracks", {}).get("items", [])
                             if itms:
-                                sp_uri = itms[0]["uri"]
-                                _ISRC_TO_SPOTIFY_CACHE[isrc] = sp_uri
-                                return sp_uri
+                                best = pick_best_spotify_item(itms, art, tit, alb)
+                                if best:
+                                    sp_uri = best["uri"]
+                                    _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
+                                    return sp_uri
                             break
                         elif sp_res.status_code == 429:
                             wait = int(sp_res.headers.get("Retry-After", "2"))
@@ -302,17 +367,17 @@ class SpotifyProvider(BaseProvider):
                         sp_res = requests.get(
                             f"{SPOTIFY_API_BASE}/search",
                             headers=headers,
-                            params={"q": text_q, "type": "track", "limit": 1},
+                            params={"q": text_q, "type": "track", "limit": 10},
                             timeout=5
                         )
                         if sp_res.status_code == 200:
                             itms = sp_res.json().get("tracks", {}).get("items", [])
                             if itms:
-                                sp_uri = itms[0]["uri"]
-                                if isrc:
-                                    _ISRC_TO_SPOTIFY_CACHE[isrc] = sp_uri
-                                _ISRC_TO_SPOTIFY_CACHE[text_q] = sp_uri
-                                return sp_uri
+                                best = pick_best_spotify_item(itms, art, tit, alb)
+                                if best:
+                                    sp_uri = best["uri"]
+                                    _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
+                                    return sp_uri
                             break
                         elif sp_res.status_code == 429:
                             wait = int(sp_res.headers.get("Retry-After", "2"))
@@ -331,34 +396,28 @@ class SpotifyProvider(BaseProvider):
                     if sp_uri:
                         direct_uris.append(sp_uri)
 
-        seen_uris = set()
-        resolved_uris = []
-        for u in direct_uris:
-            if u and u not in seen_uris:
-                seen_uris.add(u)
-                resolved_uris.append(u)
+        if not direct_uris:
+            return {"success": True, "added_count": 0}
 
-        if not resolved_uris:
-            return {"success": True, "added_count": 0, "message": "No valid track matches in this chunk"}
+        # Deduplicate while preserving order
+        unique_uris = list(dict.fromkeys(direct_uris))
 
-        add_resp = requests.post(
-            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
-            headers={**headers, "Content-Type": "application/json"},
-            json={"uris": resolved_uris},
-            timeout=15
-        )
-        if add_resp.status_code not in (200, 201):
+        # Add to Spotify playlist
+        try:
             add_resp = requests.post(
                 f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
                 headers={**headers, "Content-Type": "application/json"},
-                json={"uris": resolved_uris},
+                json={"uris": unique_uris},
                 timeout=15
             )
-
-        if add_resp.status_code in (200, 201):
-            return {"success": True, "added_count": len(resolved_uris)}
-        else:
-            return {"success": False, "error": f"Failed adding tracks to Spotify: {add_resp.text}"}
+            if add_resp.status_code in (200, 201):
+                return {"success": True, "added_count": len(unique_uris)}
+            else:
+                print(f"[Spotify] Add tracks error ({add_resp.status_code}): {add_resp.text}", file=sys.stderr, flush=True)
+                return {"success": False, "error": f"Failed to add tracks: {add_resp.text}"}
+        except Exception as e:
+            print(f"[Spotify] Error adding tracks: {e}", file=sys.stderr, flush=True)
+            return {"success": False, "error": str(e)}
 
     def create_playlist(self, name: str, track_uris: List[str], config: Dict[str, Any], session_data: Dict[str, Any], track_objects: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         init_res = self.init_playlist(name, config, session_data)

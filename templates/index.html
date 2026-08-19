@@ -1972,9 +1972,9 @@
             return {
               artist: t.artist,
               title: t.title,
-              album: t.album,
+              album: (cand && cand.album) || t.album || '',
               uri: pData.selectedUri,
-              isrc: cand.isrc || (pData.selectedUri.startsWith('spotify:track:') ? pData.selectedUri.replace('spotify:track:', '') : null)
+              isrc: (cand && cand.isrc) || (pData.selectedUri.startsWith('spotify:track:') ? pData.selectedUri.replace('spotify:track:', '') : null)
             };
           })
           .filter(Boolean);

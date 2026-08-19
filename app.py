@@ -607,51 +607,60 @@ def search_track():
 
 @app.route("/api/playlist/init", methods=["POST"])
 def api_playlist_init():
-    _refresh_spotify_token_if_needed()
-    data = request.json or {}
-    provider_name = data.get("provider", "spotify").lower()
-    name = (data.get("name") or "Imported Playlist").strip()
+    try:
+        _refresh_spotify_token_if_needed()
+        data = request.json or {}
+        provider_name = data.get("provider", "spotify").lower()
+        name = (data.get("name") or "Imported Playlist").strip()
 
-    cfg = load_config()
-    sess_dict = dict(session)
-    prov = get_provider(provider_name)
+        cfg = load_config()
+        sess_dict = dict(session)
+        prov = get_provider(provider_name)
 
-    if hasattr(prov, "init_playlist"):
-        res = prov.init_playlist(name, cfg, sess_dict)
-    else:
-        # Fallback for providers without explicit init
-        res = {"success": True, "playlist_id": "direct", "playlist_name": name, "playlist_url": ""}
+        if hasattr(prov, "init_playlist"):
+            res = prov.init_playlist(name, cfg, sess_dict)
+        else:
+            res = {"success": True, "playlist_id": "direct", "playlist_name": name, "playlist_url": ""}
 
-    if not res.get("success"):
-        return jsonify({"error": res.get("error", "Failed to initialize playlist.")}), 400
+        if not res.get("success"):
+            return jsonify({"error": res.get("error", "Failed to initialize playlist.")}), 400
 
-    return jsonify(res)
+        return jsonify(res)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Server error during playlist initialization: {str(e)}"}), 500
 
 
 @app.route("/api/playlist/add_batch", methods=["POST"])
 def api_playlist_add_batch():
-    _refresh_spotify_token_if_needed()
-    data = request.json or {}
-    provider_name = data.get("provider", "spotify").lower()
-    playlist_id = data.get("playlist_id", "")
-    tracks = data.get("tracks", [])
+    try:
+        _refresh_spotify_token_if_needed()
+        data = request.json or {}
+        provider_name = data.get("provider", "spotify").lower()
+        playlist_id = data.get("playlist_id", "")
+        tracks = data.get("tracks", [])
 
-    if not playlist_id or not tracks:
-        return jsonify({"error": "Missing playlist_id or tracks"}), 400
+        if not playlist_id or not tracks:
+            return jsonify({"error": "Missing playlist_id or tracks"}), 400
 
-    cfg = load_config()
-    sess_dict = dict(session)
-    prov = get_provider(provider_name)
+        cfg = load_config()
+        sess_dict = dict(session)
+        prov = get_provider(provider_name)
 
-    if hasattr(prov, "add_batch_to_playlist"):
-        res = prov.add_batch_to_playlist(playlist_id, tracks, cfg, sess_dict)
-    else:
-        res = {"success": True, "added_count": len(tracks)}
+        if hasattr(prov, "add_batch_to_playlist"):
+            res = prov.add_batch_to_playlist(playlist_id, tracks, cfg, sess_dict)
+        else:
+            res = {"success": True, "added_count": len(tracks)}
 
-    if not res.get("success"):
-        return jsonify({"error": res.get("error", "Failed adding track batch.")}), 400
+        if not res.get("success"):
+            return jsonify({"error": res.get("error", "Failed adding track batch.")}), 400
 
-    return jsonify(res)
+        return jsonify(res)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Server error adding tracks: {str(e)}"}), 500
 
 
 @app.route("/create_playlist", methods=["POST"])

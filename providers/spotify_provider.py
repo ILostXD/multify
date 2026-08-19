@@ -335,13 +335,14 @@ class SpotifyProvider(BaseProvider):
             if cache_key in _ISRC_TO_SPOTIFY_CACHE:
                 return _ISRC_TO_SPOTIFY_CACHE[cache_key]
 
+            # 1. Search by ISRC if available
             if isrc:
                 try:
                     sp_res = requests.get(
                         f"{SPOTIFY_API_BASE}/search",
                         headers=headers,
                         params={"q": f"isrc:{isrc}", "type": "track", "limit": 10},
-                        timeout=3
+                        timeout=8
                     )
                     if sp_res.status_code == 200:
                         itms = sp_res.json().get("tracks", {}).get("items", [])
@@ -351,9 +352,12 @@ class SpotifyProvider(BaseProvider):
                                 sp_uri = best["uri"]
                                 _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
                                 return sp_uri
-                except Exception:
-                    pass
+                    else:
+                        print(f"[Spotify] Search ISRC {isrc} failed ({sp_res.status_code}): {sp_res.text}", file=sys.stderr, flush=True)
+                except Exception as e:
+                    print(f"[Spotify] Search ISRC {isrc} error: {e}", file=sys.stderr, flush=True)
 
+            # 2. Fallback to artist + title search
             text_q = query or f"{art} {tit}".strip()
             if text_q:
                 try:
@@ -361,7 +365,7 @@ class SpotifyProvider(BaseProvider):
                         f"{SPOTIFY_API_BASE}/search",
                         headers=headers,
                         params={"q": text_q, "type": "track", "limit": 10},
-                        timeout=3
+                        timeout=8
                     )
                     if sp_res.status_code == 200:
                         itms = sp_res.json().get("tracks", {}).get("items", [])
@@ -371,8 +375,10 @@ class SpotifyProvider(BaseProvider):
                                 sp_uri = best["uri"]
                                 _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
                                 return sp_uri
-                except Exception:
-                    pass
+                    else:
+                        print(f"[Spotify] Search text '{text_q}' failed ({sp_res.status_code}): {sp_res.text}", file=sys.stderr, flush=True)
+                except Exception as e:
+                    print(f"[Spotify] Search text '{text_q}' error: {e}", file=sys.stderr, flush=True)
 
             return None
 
@@ -390,43 +396,44 @@ class SpotifyProvider(BaseProvider):
                 unique_uris.append(u)
 
         if not unique_uris:
-            return {"success": True, "added_count": 0}
+            return {"success": False, "error": "No tracks could be resolved on Spotify for this batch."}
 
-        # Add to Spotify playlist (support both /items and /tracks with auto-refresh)
-        endpoints = [
-            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
-            f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks"
-        ]
-
-        add_resp = None
-        for ep in endpoints:
-            for attempt in range(2):
-                try:
+        # Add to Spotify playlist
+        for attempt in range(2):
+            try:
+                add_resp = requests.post(
+                    f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/items",
+                    headers={**headers, "Content-Type": "application/json"},
+                    json={"uris": unique_uris},
+                    timeout=12
+                )
+                if add_resp.status_code in (200, 201):
+                    return {"success": True, "added_count": len(unique_uris)}
+                elif add_resp.status_code == 404:
+                    # Legacy fallback to /tracks
                     add_resp = requests.post(
-                        ep,
+                        f"{SPOTIFY_API_BASE}/playlists/{playlist_id}/tracks",
                         headers={**headers, "Content-Type": "application/json"},
                         json={"uris": unique_uris},
-                        timeout=10
+                        timeout=12
                     )
                     if add_resp.status_code in (200, 201):
                         return {"success": True, "added_count": len(unique_uris)}
-                    elif add_resp.status_code == 401 and attempt == 0:
-                        session_data["token_expires_at"] = 0
-                        config["spotify_token_expires_at"] = 0
-                        new_token = self._get_fresh_token(config, session_data)
-                        if new_token:
-                            headers = {"Authorization": f"Bearer {new_token}"}
-                            continue
-                except Exception as e:
-                    print(f"[Spotify] Error posting to {ep}: {e}", file=sys.stderr, flush=True)
+                elif add_resp.status_code == 401 and attempt == 0:
+                    session_data["token_expires_at"] = 0
+                    config["spotify_token_expires_at"] = 0
+                    new_token = self._get_fresh_token(config, session_data)
+                    if new_token:
+                        headers = {"Authorization": f"Bearer {new_token}"}
+                        continue
+                
+                print(f"[Spotify] Add tracks error ({add_resp.status_code}): {add_resp.text}", file=sys.stderr, flush=True)
+                return {"success": False, "error": f"Failed to add tracks ({add_resp.status_code}): {add_resp.text}"}
+            except Exception as e:
+                print(f"[Spotify] Error adding tracks: {e}", file=sys.stderr, flush=True)
+                return {"success": False, "error": str(e)}
 
-        if add_resp is not None and add_resp.status_code in (200, 201):
-            return {"success": True, "added_count": len(unique_uris)}
-        else:
-            status = add_resp.status_code if add_resp else 500
-            err_body = add_resp.text if add_resp else "No response"
-            print(f"[Spotify] Add tracks failed ({status}): {err_body}", file=sys.stderr, flush=True)
-            return {"success": False, "error": f"Failed to add tracks: {err_body}"}
+        return {"success": False, "error": "Failed to add tracks to Spotify."}
 
     def create_playlist(self, name: str, track_uris: List[str], config: Dict[str, Any], session_data: Dict[str, Any], track_objects: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         init_res = self.init_playlist(name, config, session_data)

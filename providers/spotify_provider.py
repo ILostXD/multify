@@ -353,18 +353,33 @@ class SpotifyProvider(BaseProvider):
                                 _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
                                 return sp_uri
                     else:
-                        print(f"[Spotify] Search ISRC {isrc} failed ({sp_res.status_code}): {sp_res.text}", file=sys.stderr, flush=True)
+                        print(f"[Spotify] Search ISRC {isrc} status {sp_res.status_code}: {sp_res.text}", file=sys.stderr, flush=True)
                 except Exception as e:
                     print(f"[Spotify] Search ISRC {isrc} error: {e}", file=sys.stderr, flush=True)
 
-            # 2. Fallback to artist + title search
-            text_q = query or f"{art} {tit}".strip()
-            if text_q:
+            # 2. Search using artist & title variations
+            arts = extract_artist_variations(art)
+            tits = extract_title_variations(tit)
+            
+            search_queries = []
+            if arts and tits:
+                for a in arts[:3]:
+                    for t in tits[:2]:
+                        q1 = f'artist:"{a}" track:"{t}"'
+                        q2 = f'{a} {t}'
+                        if q1 not in search_queries:
+                            search_queries.append(q1)
+                        if q2 not in search_queries:
+                            search_queries.append(q2)
+            if query and query not in search_queries:
+                search_queries.append(query)
+
+            for sq in search_queries:
                 try:
                     sp_res = requests.get(
                         f"{SPOTIFY_API_BASE}/search",
                         headers=headers,
-                        params={"q": text_q, "type": "track", "limit": 10},
+                        params={"q": sq, "type": "track", "limit": 10},
                         timeout=8
                     )
                     if sp_res.status_code == 200:
@@ -375,10 +390,13 @@ class SpotifyProvider(BaseProvider):
                                 sp_uri = best["uri"]
                                 _ISRC_TO_SPOTIFY_CACHE[cache_key] = sp_uri
                                 return sp_uri
+                    elif sp_res.status_code == 429:
+                        wait = int(sp_res.headers.get("Retry-After", "2"))
+                        time.sleep(wait + 0.2)
                     else:
-                        print(f"[Spotify] Search text '{text_q}' failed ({sp_res.status_code}): {sp_res.text}", file=sys.stderr, flush=True)
+                        print(f"[Spotify] Search query '{sq}' status {sp_res.status_code}: {sp_res.text}", file=sys.stderr, flush=True)
                 except Exception as e:
-                    print(f"[Spotify] Search text '{text_q}' error: {e}", file=sys.stderr, flush=True)
+                    print(f"[Spotify] Search text '{sq}' error: {e}", file=sys.stderr, flush=True)
 
             return None
 

@@ -243,16 +243,19 @@ class SmartResolver:
         seen_ids = set()
         raw_candidates: List[Dict[str, Any]] = []
 
-        # Construct prioritized query set
-        queries = [
-            f"{art_vars[0]} {tit_vars[0]}".strip(),
-            f'artist:"{art_vars[0]}" track:"{tit_vars[0]}"',
-            tit_vars[0].strip()
-        ]
-        if len(art_vars) > 1:
-            queries.append(f"{art_vars[1]} {tit_vars[0]}".strip())
-        if len(tit_vars) > 1:
-            queries.append(f"{art_vars[0]} {tit_vars[1]}".strip())
+        # Construct prioritized query set across all artist & title variations
+        queries = []
+        for a in art_vars:
+            for t in tit_vars:
+                q1 = f"{a} {t}".strip()
+                if q1 and q1 not in queries:
+                    queries.append(q1)
+                q2 = f'artist:"{a}" track:"{t}"'.strip()
+                if q2 and q2 not in queries:
+                    queries.append(q2)
+        for t in tit_vars:
+            if t and t not in queries:
+                queries.append(t)
 
         # Execute queries in order, aggregating all distinct track hits
         for q in queries:

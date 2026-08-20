@@ -26,21 +26,28 @@
 
 ## Screenshots & Interface
 
-### 1. Landing Page & Multi-Service Hub
+### 1. Homepage & Multi-Service Hub
 Select your target streaming service with dedicated glowing hero cards and direct dropzone import.
 
 <p align="center">
-  <img src="assets/LandingPage.png" alt="Multify Landing Page" width="800" />
+  <img src="assets/HomePage.png" alt="Multify Homepage" width="800" />
 </p>
 
 ### 2. Intelligent Matcher & Track Review
-Live status badges, album art previews, and dropdown candidate selector with manual override and skip options.
+Live status badges, album art previews, and dropdown candidate selector with manual override, skip options, and navigation jumper.
 
 <p align="center">
   <img src="assets/SongItem.png" alt="Track Match Review" width="800" />
 </p>
 
-### 3. Provider Settings & Credentials
+### 3. Master Login & App Protection
+Secure master access protection to keep your converter instance, streaming configurations, and credentials safe.
+
+<p align="center">
+  <img src="assets/Login.png" alt="Multify Login Screen" width="800" />
+</p>
+
+### 4. Provider Settings & Credentials
 Tabbed credential management for Spotify OAuth, YouTube Music session headers, and Tidal device authorization.
 
 <p align="center">

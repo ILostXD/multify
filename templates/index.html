@@ -795,6 +795,123 @@
     }
 
     /* ── Floating Action Dock ── */
+    /* ?? Floating Navigation Jumper Widget ?? */
+    .floating-jumper-pill {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.45rem 0.65rem 0.45rem 0.85rem;
+      border-radius: 999px;
+      background: var(--dock-bg);
+      backdrop-filter: blur(28px) saturate(200%);
+      -webkit-backdrop-filter: blur(28px) saturate(200%);
+      border: 1px solid var(--dock-border);
+      box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+      animation: jumperSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      cursor: default;
+      user-select: none;
+    }
+
+    .floating-jumper-pill:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 48px -6px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+
+    @keyframes jumperSlideIn {
+      from {
+        opacity: 0;
+        transform: translate3d(0, 14px, 0) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+      }
+    }
+
+    .jumper-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .jumper-badge.badge-review {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .jumper-badge.badge-skipped {
+      background: rgba(239, 68, 68, 0.18);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+    }
+
+    .jumper-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.42rem 0.85rem;
+      border-radius: 999px;
+      border: none;
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 4px 14px var(--primary-glow);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+      white-space: nowrap;
+      pointer-events: auto;
+    }
+
+    .jumper-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px var(--primary-glow);
+      filter: brightness(1.12);
+    }
+
+    .jumper-btn:active {
+      transform: translateY(1px);
+      filter: brightness(0.95);
+    }
+
+    .jumper-btn-top {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+    }
+
+    .jumper-btn-top:hover {
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+    }
+
+    .jumper-close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0.32rem;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s ease, background 0.15s ease;
+      pointer-events: auto;
+    }
+
+    .jumper-close-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
     .floating-dock-container {
       position: fixed;
       bottom: 1.5rem;
@@ -2633,35 +2750,38 @@
           {tracks.length > 0 && (
             <div className="floating-dock-container">
               {jumpTarget && (jumpIndices[jumpTarget.mode] || []).length > 0 && (
-                <div className="floating-jumper-pill liquid-glass">
+                <div className="floating-jumper-pill">
                   <span className={`jumper-badge ${jumpTarget.mode === 'review' ? 'badge-review' : 'badge-skipped'}`}>
                     <Icon name={jumpTarget.mode === 'review' ? 'alert-triangle' : 'slash'} size={13} />
-                    {jumpTarget.mode === 'review' ? 'Review' : 'Skipped'} {jumpTarget.index + 1} / {(jumpIndices[jumpTarget.mode] || []).length}
+                    <span>{jumpTarget.mode === 'review' ? 'Review' : 'Skipped'} {jumpTarget.index + 1} / {(jumpIndices[jumpTarget.mode] || []).length}</span>
                   </span>
                   
                   {jumpTarget.index < (jumpIndices[jumpTarget.mode] || []).length - 1 ? (
                     <button 
+                      type="button"
                       className="jumper-btn" 
-                      onClick={handleNextJump}
+                      onClick={(e) => { e.stopPropagation(); handleNextJump(); }}
                       title={`Jump to next ${jumpTarget.mode === 'review' ? 'review' : 'skipped'} track`}
                     >
                       <span>Next {jumpTarget.mode === 'review' ? 'Review' : 'Skipped'}</span>
-                      <Icon name="arrow-down" size={15} />
+                      <Icon name="arrow-down" size={14} />
                     </button>
                   ) : (
                     <button 
+                      type="button"
                       className="jumper-btn jumper-btn-top" 
-                      onClick={handleGoToTop}
+                      onClick={(e) => { e.stopPropagation(); handleGoToTop(); }}
                       title="Jump back to the top of the playlist"
                     >
                       <span>Go to Top</span>
-                      <Icon name="arrow-up" size={15} />
+                      <Icon name="arrow-up" size={14} />
                     </button>
                   )}
 
                   <button 
+                    type="button"
                     className="jumper-close-btn" 
-                    onClick={() => { setJumpTarget(null); setHighlightedTrackIndex(null); }}
+                    onClick={(e) => { e.stopPropagation(); setJumpTarget(null); setHighlightedTrackIndex(null); }}
                     title="Close navigation"
                   >
                     <Icon name="x" size={14} />

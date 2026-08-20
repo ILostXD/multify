@@ -888,14 +888,19 @@
       background: var(--input-bg);
       border: 1.5px solid #1db954;
       color: var(--text);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
 
     .jumper-btn-top:hover {
       background: var(--row-hover-bg);
       border-color: #1db954;
-      box-shadow: 0 4px 14px rgba(29, 185, 84, 0.25);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       filter: none;
+    }
+
+    .jumper-btn-top:active {
+      transform: translateY(1px);
+      background: var(--input-bg);
     }
 
     .jumper-btn-top svg {

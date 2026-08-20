@@ -18,7 +18,7 @@ _ISRC_TO_SPOTIFY_CACHE: Dict[str, str] = {}
 
 
 def pick_best_spotify_item(items: List[Dict[str, Any]], target_artist: str = "", target_title: str = "", target_album: str = "") -> Optional[Dict[str, Any]]:
-    """Select the best matching track from Spotify candidates, penalizing random compilations in favor of studio albums/singles."""
+    """Select the best matching track from Spotify candidates, strictly prioritizing official artist studio releases over third-party compilations."""
     if not items:
         return None
     if len(items) == 1:
@@ -37,41 +37,68 @@ def pick_best_spotify_item(items: List[Dict[str, Any]], target_artist: str = "",
         t_tit = (target_title or "").lower()
         t_alb = (target_album or "").lower()
         
-        # 1. Heavily penalize compilations & compilation buzzwords
-        if alb_type == "compilation":
-            score -= 80.0
-        
-        compilation_keywords = [
-            "viral", "tiktok", "hits", "compilation", "best of", "summer", "workout", 
-            "star rap", "hyperwave", "top 50", "top 100", "various artists", "party hits",
-            "gym", "driving", "throwback", "autumn", "winter", "spring", "vibes 202",
-            "greatest hits", "top hits", "soundtrack", "ost", "lofi hits", "car music"
-        ]
-        if any(kw in alb_name for kw in compilation_keywords):
-            score -= 70.0
-        if any("various" in a for a in alb_artists):
-            score -= 60.0
+        first_target_art = t_art.split(",")[0].split("&")[0].split("feat")[0].split("ft.")[0].strip()
+        track_artists = [a.get("name", "").lower() for a in itm.get("artists", []) if a.get("name")]
+        first_track_art = track_artists[0] if track_artists else ""
 
-        # 2. Reward studio albums & singles
-        if alb_type == "album":
-            score += 40.0
-        elif alb_type == "single":
-            score += 25.0
-            
-        # 3. Reward artist match on album
-        if any(t_art in a or a in t_art for a in alb_artists if a):
-            score += 50.0
-        elif t_art and alb_artists:
-            first_art = t_art.split(",")[0].strip()
-            if any(first_art in a or a in first_art for a in alb_artists if a):
-                score += 45.0
+        # 1. Compilation buzzwords check
+        compilation_keywords = [
+            "compilation", "various artists", "various", "hits", "greatest hits", "best of", 
+            "massive", "just rap", "star rap", "hyperwave", "tiktok", "viral", "top 50", 
+            "top 100", "top hits", "chart hits", "summer", "winter", "spring", "autumn", 
+            "workout", "gym", "driving", "party", "playlist", "lofi", "soundtrack", "ost", 
+            "collection", "ultimate", "essential", "anthems", "club", "radio", "tunes", 
+            "bass", "trap hits", "rap hits", "hip hop hits", "power hits", "clean hits", 
+            "car music", "vibes", "edition 202", "hits 202", "top 202", "vol.", "volume", 
+            "sound of", "now that's what i call", "ministry of sound", "megahits", "superhits", 
+            "smash hits", "party songs", "rap caviar", "bangers", "throwback", "gold", 
+            "platinum", "all stars", "anniversary", "reloaded", "deluxe compilation", 
+            "dj mix", "mixtape collection", "chill vibes", "mood booster", "party anthem"
+        ]
+
+        is_compilation_keyword = any(kw in alb_name for kw in compilation_keywords)
+        is_various_artists = any("various" in a for a in alb_artists)
+
+        # 2. Artist match on album: Official album MUST have the artist in album.artists
+        has_artist_on_album = False
+        if t_art and alb_artists:
+            if any(t_art in a or a in t_art for a in alb_artists):
+                has_artist_on_album = True
+            elif first_target_art and any(first_target_art in a or a in first_target_art for a in alb_artists):
+                has_artist_on_album = True
+        if not has_artist_on_album and first_track_art and alb_artists:
+            if any(first_track_art in a or a in first_track_art for a in alb_artists):
+                has_artist_on_album = True
+
+        # Heavy penalties for compilations / missing artist on album
+        if alb_type == "compilation":
+            score -= 300.0
+        if is_compilation_keyword:
+            score -= 250.0
+        if is_various_artists:
+            score -= 250.0
+        if not has_artist_on_album:
+            score -= 200.0
+
+        # 3. Rewards for official artist releases
+        if has_artist_on_album:
+            score += 150.0
+            if alb_type == "album":
+                score += 80.0
+            elif alb_type == "single":
+                score += 40.0
 
         # 4. Reward target album match
         if t_alb and len(t_alb) > 2:
             if t_alb == alb_name:
-                score += 100.0
+                score += 250.0
             elif t_alb in alb_name or alb_name in t_alb:
-                score += 70.0
+                score += 150.0
+
+        # 5. Reward title match in album name
+        if t_tit and len(t_tit) > 2:
+            if t_tit == alb_name or t_tit in alb_name:
+                score += 40.0
 
         return score
 

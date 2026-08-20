@@ -863,10 +863,10 @@
       border: none;
       font-family: inherit;
       font-size: 0.8rem;
-      font-weight: 700;
+      font-weight: 800;
       cursor: pointer;
       background: var(--primary);
-      color: #ffffff;
+      color: #000000;
       box-shadow: 0 4px 14px var(--primary-glow);
       transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
       white-space: nowrap;
@@ -876,7 +876,7 @@
     .jumper-btn:hover {
       transform: translateY(-1px);
       box-shadow: 0 6px 20px var(--primary-glow);
-      filter: brightness(1.12);
+      filter: brightness(1.08);
     }
 
     .jumper-btn:active {
@@ -885,12 +885,22 @@
     }
 
     .jumper-btn-top {
-      background: linear-gradient(135deg, #6366f1, #8b5cf6);
-      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+      background: var(--input-bg);
+      border: 1.5px solid #1db954;
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     }
 
     .jumper-btn-top:hover {
-      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+      background: var(--row-hover-bg);
+      border-color: #1db954;
+      box-shadow: 0 4px 14px rgba(29, 185, 84, 0.25);
+      filter: none;
+    }
+
+    .jumper-btn-top svg {
+      stroke: #1db954;
+      color: #1db954;
     }
 
     .jumper-close-btn {

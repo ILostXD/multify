@@ -23,9 +23,6 @@
 
 > [!TIP]
 > **Smart Match Engine & Accuracy**: Multify handles the heavy lifting by automatically resolving ISRC codes, parsing artist/title variations, prioritizing official artist studio releases, and filtering out generic compilation albums. While matching accuracy exceeds **98%+**, minor manual adjustments may occasionally be needed for rare, unreleased, or region-locked tracks using the built-in candidate selector and navigation jumpers.
-
-> [!TIP]
-> **Smart Match Engine & Accuracy**: Multify handles the heavy lifting by automatically resolving ISRC codes, parsing artist/title variations, prioritizing official artist studio releases, and filtering out generic compilation albums. While matching accuracy exceeds **98%+**, minor manual adjustments may occasionally be needed for rare, unreleased, or region-locked tracks using the built-in candidate selector and navigation jumpers.
 , privacy-first playlist converter designed to import local music library playlists (`.m3u8` / `.m3u`) into your favorite cloud streaming services. With intelligent track metadata matching, studio album prioritization, guest search modes, and a stunning liquid glass interface, Multify makes migrating and synchronizing playlists effortless.
 
 ## Screenshots & Interface

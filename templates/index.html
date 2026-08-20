@@ -189,11 +189,9 @@
     @keyframes appFadeIn {
       from {
         opacity: 0;
-        transform: translate3d(0, 6px, 0);
       }
       to {
         opacity: 1;
-        transform: translate3d(0, 0, 0);
       }
     }
 
@@ -803,8 +801,10 @@
       left: 0;
       right: 0;
       display: flex;
-      justify-content: center;
-      z-index: 99;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.65rem;
+      z-index: 9999;
       pointer-events: none;
       padding: 0 1rem;
     }
@@ -2629,47 +2629,46 @@
             </>
           )}
 
-          {/* Floating Jumper Pill */}
-          {jumpTarget && (jumpIndices[jumpTarget.mode] || []).length > 0 && (
-            <div className="floating-jumper-pill liquid-glass">
-              <span className={`jumper-badge ${jumpTarget.mode === 'review' ? 'badge-review' : 'badge-skipped'}`}>
-                <Icon name={jumpTarget.mode === 'review' ? 'alert-triangle' : 'slash'} size={13} />
-                {jumpTarget.mode === 'review' ? 'Review' : 'Skipped'} {jumpTarget.index + 1} of {(jumpIndices[jumpTarget.mode] || []).length}
-              </span>
-              
-              {jumpTarget.index < (jumpIndices[jumpTarget.mode] || []).length - 1 ? (
-                <button 
-                  className="jumper-btn" 
-                  onClick={handleNextJump}
-                  title={`Jump to next ${jumpTarget.mode === 'review' ? 'review' : 'skipped'} track`}
-                >
-                  <span>Next {jumpTarget.mode === 'review' ? 'Review' : 'Skipped'}</span>
-                  <Icon name="arrow-down" size={15} />
-                </button>
-              ) : (
-                <button 
-                  className="jumper-btn jumper-btn-top" 
-                  onClick={handleGoToTop}
-                  title="Jump back to the top of the playlist"
-                >
-                  <span>Go to Top</span>
-                  <Icon name="arrow-up" size={15} />
-                </button>
-              )}
-
-              <button 
-                className="jumper-close-btn" 
-                onClick={() => { setJumpTarget(null); setHighlightedTrackIndex(null); }}
-                title="Close navigation"
-              >
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-          )}
-
-          {/* Floating Action Dock */}
+          {/* Floating Action Dock & Jumper Navigator */}
           {tracks.length > 0 && (
             <div className="floating-dock-container">
+              {jumpTarget && (jumpIndices[jumpTarget.mode] || []).length > 0 && (
+                <div className="floating-jumper-pill liquid-glass">
+                  <span className={`jumper-badge ${jumpTarget.mode === 'review' ? 'badge-review' : 'badge-skipped'}`}>
+                    <Icon name={jumpTarget.mode === 'review' ? 'alert-triangle' : 'slash'} size={13} />
+                    {jumpTarget.mode === 'review' ? 'Review' : 'Skipped'} {jumpTarget.index + 1} / {(jumpIndices[jumpTarget.mode] || []).length}
+                  </span>
+                  
+                  {jumpTarget.index < (jumpIndices[jumpTarget.mode] || []).length - 1 ? (
+                    <button 
+                      className="jumper-btn" 
+                      onClick={handleNextJump}
+                      title={`Jump to next ${jumpTarget.mode === 'review' ? 'review' : 'skipped'} track`}
+                    >
+                      <span>Next {jumpTarget.mode === 'review' ? 'Review' : 'Skipped'}</span>
+                      <Icon name="arrow-down" size={15} />
+                    </button>
+                  ) : (
+                    <button 
+                      className="jumper-btn jumper-btn-top" 
+                      onClick={handleGoToTop}
+                      title="Jump back to the top of the playlist"
+                    >
+                      <span>Go to Top</span>
+                      <Icon name="arrow-up" size={15} />
+                    </button>
+                  )}
+
+                  <button 
+                    className="jumper-close-btn" 
+                    onClick={() => { setJumpTarget(null); setHighlightedTrackIndex(null); }}
+                    title="Close navigation"
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+              )}
+
               <div className="floating-dock">
                 <div className="dock-pill-stats">
                   <Icon name="check-circle" size={16} style={{ color: 'var(--primary)' }} />

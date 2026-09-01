@@ -550,18 +550,40 @@ TIDAL_ACTIVE_SESSIONS: Dict[str, Any] = {}
 def tidal_start_login():
     try:
         t_session = tidalapi.Session()
-        login_key, uri, expires = t_session.login_oauth()
+        res = t_session.login_oauth()
         session_id = secrets.token_hex(12)
-        TIDAL_ACTIVE_SESSIONS[session_id] = {
-            "session": t_session,
-            "login_key": login_key,
-            "created_at": time.time()
-        }
-        return jsonify({
-            "session_id": session_id,
-            "login_url": uri,
-            "expires_in": expires
-        })
+
+        # Handle tidalapi 0.8+ (returns LinkLogin, Future)
+        if isinstance(res, tuple) and len(res) == 2:
+            link_login, future = res
+            uri = getattr(link_login, "verification_uri_complete", None) or f"https://{getattr(link_login, 'verification_uri', 'link.tidal.com')}"
+            if not str(uri).startswith("http"):
+                uri = "https://" + str(uri)
+            expires = getattr(link_login, "expires_in", 300)
+            TIDAL_ACTIVE_SESSIONS[session_id] = {
+                "session": t_session,
+                "future": future,
+                "created_at": time.time()
+            }
+            return jsonify({
+                "session_id": session_id,
+                "login_url": str(uri),
+                "expires_in": expires
+            })
+        elif isinstance(res, tuple) and len(res) >= 3:
+            login_key, uri, expires = res[0], res[1], res[2]
+            TIDAL_ACTIVE_SESSIONS[session_id] = {
+                "session": t_session,
+                "login_key": login_key,
+                "created_at": time.time()
+            }
+            return jsonify({
+                "session_id": session_id,
+                "login_url": str(uri),
+                "expires_in": expires
+            })
+        else:
+            return jsonify({"error": "Unsupported Tidal response format."}), 500
     except Exception as e:
         return jsonify({"error": f"Failed to start Tidal login: {str(e)}"}), 500
 
@@ -575,21 +597,41 @@ def tidal_check_login():
         return jsonify({"error": "Login session expired or not found."}), 400
 
     t_session = sess_obj["session"]
-    login_key = sess_obj["login_key"]
 
     try:
-        is_logged_in = t_session.process_link_login(login_key)
-        if is_logged_in and t_session.check_login():
-            save_config({
-                "tidal_token_type": t_session.token_type,
-                "tidal_access_token": t_session.access_token,
-                "tidal_refresh_token": t_session.refresh_token,
-                "tidal_expiry_time": str(t_session.expiry_time),
-            })
-            del TIDAL_ACTIVE_SESSIONS[session_id]
-            return jsonify({"success": True, "message": "Successfully connected Tidal!"})
-        else:
-            return jsonify({"pending": True, "message": "Waiting for authorization on Tidal..."})
+        future = sess_obj.get("future")
+        if future is not None:
+            if future.done():
+                if t_session.check_login():
+                    save_config({
+                        "tidal_token_type": getattr(t_session, "token_type", "Bearer"),
+                        "tidal_access_token": getattr(t_session, "access_token", ""),
+                        "tidal_refresh_token": getattr(t_session, "refresh_token", ""),
+                        "tidal_expiry_time": str(getattr(t_session, "expiry_time", "")),
+                    })
+                    TIDAL_ACTIVE_SESSIONS.pop(session_id, None)
+                    return jsonify({"success": True, "message": "Successfully connected Tidal!"})
+                else:
+                    return jsonify({"error": "Tidal authorization was not completed or failed."}), 400
+            else:
+                return jsonify({"pending": True, "message": "Waiting for authorization on Tidal..."})
+
+        login_key = sess_obj.get("login_key")
+        if login_key and hasattr(t_session, "process_link_login"):
+            is_logged_in = t_session.process_link_login(login_key)
+            if is_logged_in and t_session.check_login():
+                save_config({
+                    "tidal_token_type": getattr(t_session, "token_type", "Bearer"),
+                    "tidal_access_token": getattr(t_session, "access_token", ""),
+                    "tidal_refresh_token": getattr(t_session, "refresh_token", ""),
+                    "tidal_expiry_time": str(getattr(t_session, "expiry_time", "")),
+                })
+                TIDAL_ACTIVE_SESSIONS.pop(session_id, None)
+                return jsonify({"success": True, "message": "Successfully connected Tidal!"})
+            else:
+                return jsonify({"pending": True, "message": "Waiting for authorization on Tidal..."})
+
+        return jsonify({"pending": True, "message": "Waiting for authorization on Tidal..."})
     except Exception as e:
         return jsonify({"error": f"Tidal check failed: {str(e)}"}), 400
 

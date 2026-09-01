@@ -2,6 +2,7 @@ import json
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from ytmusicapi import YTMusic
+from ytmusicapi.setup import setup_browser
 from ytmusicapi.auth.oauth import OAuthCredentials
 from providers import BaseProvider
 
@@ -26,17 +27,30 @@ class YouTubeMusicProvider(BaseProvider):
 
         if os.path.isfile(oauth_path):
             try:
-                return YTMusic(oauth_path, oauth_credentials=oauth_creds)
+                client = YTMusic(oauth_path, oauth_credentials=oauth_creds)
+                if client:
+                    return client
             except Exception:
                 pass
 
-        # 2. Check if raw browser headers are provided in config (legacy fallback)
-        headers_raw = config.get("ytmusic_headers", "").strip()
+        # 2. Check if browser headers are provided in config
+        headers_raw = (config.get("ytmusic_headers") or "").strip()
         if headers_raw:
             try:
-                return YTMusic(headers_raw)
+                # If already a valid json string of headers
+                if headers_raw.startswith("{") and "cookie" in headers_raw.lower():
+                    client = YTMusic(auth=headers_raw)
+                    return client
+                else:
+                    # Convert raw request headers text using ytmusicapi setup_browser
+                    parsed_json = setup_browser(headers_raw=headers_raw)
+                    client = YTMusic(auth=parsed_json)
+                    return client
             except Exception:
-                pass
+                try:
+                    return YTMusic(auth=headers_raw)
+                except Exception:
+                    pass
 
         if authenticated_only:
             return None
@@ -101,7 +115,7 @@ class YouTubeMusicProvider(BaseProvider):
         if not client:
             return {
                 "success": False,
-                "error": "YouTube Music is not authenticated. Please connect your Google account in Settings."
+                "error": "YouTube Music is not authenticated. Please paste your browser headers in Settings."
             }
 
         try:
@@ -119,7 +133,8 @@ class YouTubeMusicProvider(BaseProvider):
                 "success": True,
                 "playlist_name": name,
                 "playlist_url": playlist_url,
-                "track_count": len(track_uris)
+                "playlist_id": playlist_id,
+                "added_count": len(track_uris)
             }
         except Exception as e:
             return {

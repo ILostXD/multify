@@ -2601,7 +2601,7 @@
                   <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => { setSettingsTab('ytmusic'); setShowSettings(true); }} className="glass-btn glass-btn-ytmusic" style={{ padding: '0.8rem 2.2rem', fontSize: '0.95rem' }}>
                       <Icon name="play-circle" size={18} />
-                      <span>Connect Google Account</span>
+                      <span>Connect Account</span>
                     </button>
                     <button onClick={() => setGuestMode(prev => ({ ...prev, ytmusic: true }))} className="glass-btn" style={{ padding: '0.8rem 1.4rem', fontSize: '0.95rem' }}>
                       <Icon name="play-circle" size={16} />
@@ -3123,7 +3123,7 @@
                             </div>
                             <div>
                               <h4 style={{ fontSize: '0.98rem', fontWeight: 800, color: 'var(--text)' }}>YouTube Music Connected</h4>
-                              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Your Google account is authorized to create playlists and manage library.</p>
+                              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600 }}>Your account is connected and ready to create playlists in your YouTube library.</p>
                             </div>
                           </div>
                           <span className="status-pill status-pill-ok">
@@ -3140,193 +3140,134 @@
                         </div>
                       </div>
                     ) : (
-                      <div className="settings-panel-card" style={{ padding: '1.15rem', marginBottom: '1.25rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#ff0000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                              <YTMusicLogo size={16} />
+                      <div>
+                        {/* Primary Method: Browser Headers / Cookie */}
+                        <form onSubmit={handleSaveSettings} className="settings-panel-card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.65rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <div style={{ width: 28, height: 28, borderRadius: 8, background: '#ff0000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                                <YTMusicLogo size={16} />
+                              </div>
+                              <h4 style={{ fontSize: '0.94rem', fontWeight: 800 }}>Connect via Browser Headers</h4>
                             </div>
-                            <h4 style={{ fontSize: '0.94rem', fontWeight: 800 }}>Google OAuth Sign-In</h4>
+                            <span className="badge" style={{ background: 'rgba(255, 0, 0, 0.15)', color: '#ff4444', fontSize: '0.7rem', fontWeight: 800 }}>RECOMMENDED</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setShowYTHelp(!showYTHelp)}
-                            className="glass-btn icon-btn"
-                            title="Setup instructions"
-                            style={{ width: 28, height: 28, minWidth: 28, minHeight: 28 }}
-                          >
-                            <Icon name="help-circle" size={14} />
-                          </button>
-                        </div>
-                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '1rem' }}>
-                          Connect your Google account seamlessly using OAuth 2.0 to create playlists directly in YouTube Music.
-                        </p>
 
-                        {showYTHelp && (
                           <div style={{ padding: '0.85rem', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid var(--input-border)', fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.55, marginBottom: '1rem' }}>
                             <div style={{ fontWeight: 800, color: 'var(--text)', marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                               <Icon name="info" size={14} style={{ color: '#ff0000' }} />
-                              <span>How to get free Google OAuth Credentials (1 Minute):</span>
+                              <span>Quick 3-Step Setup (Zero Google Cloud required):</span>
                             </div>
                             <ol style={{ paddingLeft: '1.2rem', margin: '0.35rem 0', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                              <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline', fontWeight: 700 }}>Google Cloud Console &rarr; Credentials</a> and create or select a project.</li>
-                              <li>Go to <b>Enabled APIs &amp; Services</b> &rarr; Click <b>+ Enable APIs</b> &rarr; Enable <b>YouTube Data API v3</b>.</li>
-                              <li>Under <b>Credentials</b> &rarr; Click <b>Create Credentials</b> &rarr; <b>OAuth client ID</b> &rarr; Choose Application type: <b>TVs and Limited Input devices</b> (or Desktop).</li>
-                              <li>Paste your <b>Client ID</b> and <b>Client Secret</b> below and click <b>Connect with Google</b>!</li>
+                              <li>Open <a href="https://music.youtube.com" target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'underline', fontWeight: 700 }}>music.youtube.com</a> in your browser and ensure you are logged in.</li>
+                              <li>Press <b>F12</b> &rarr; Click the <b>Network</b> tab &rarr; Filter by <code>browse</code> (or click any playlist/album) &rarr; Right-click the request &rarr; <b>Copy</b> &rarr; <b>Copy request headers</b>.</li>
+                              <li>Paste the copied text below and click <b>Save &amp; Connect</b>!</li>
                             </ol>
                           </div>
-                        )}
 
-                        <div className="settings-field-group" style={{ marginBottom: '0.85rem' }}>
-                          <label className="settings-label">Google Client ID</label>
-                          <div className="settings-input-wrapper">
-                            <Icon name="key" size={16} style={{ color: 'var(--text-muted)' }} />
-                            <input
-                              type="text"
-                              className="settings-input"
-                              placeholder="e.g. 1234567890-abcdef.apps.googleusercontent.com"
-                              value={settingsForm.ytmusic_client_id}
-                              onChange={e => setSettingsForm({ ...settingsForm, ytmusic_client_id: e.target.value })}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="settings-field-group" style={{ marginBottom: '1rem' }}>
-                          <label className="settings-label">Google Client Secret</label>
-                          <div className="settings-input-wrapper">
-                            <Icon name="shield" size={16} style={{ color: 'var(--text-muted)' }} />
-                            <input
-                              type={showYTSecret ? "text" : "password"}
-                              className="settings-input"
-                              placeholder="e.g. GOCSPX-abc123xyz"
-                              value={settingsForm.ytmusic_client_secret}
-                              onChange={e => setSettingsForm({ ...settingsForm, ytmusic_client_secret: e.target.value })}
-                            />
-                            <button
-                              type="button"
-                              className="settings-toggle-btn"
-                              onClick={() => setShowYTSecret(!showYTSecret)}
-                            >
-                              <Icon name={showYTSecret ? "eye-off" : "eye"} size={16} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {ytmusicError && (
-                          <div style={{ padding: '0.65rem 0.85rem', borderRadius: 10, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                            <Icon name="alert-triangle" size={15} />
-                            <span>{ytmusicError}</span>
-                          </div>
-                        )}
-
-                        {ytmusicLoginData ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', padding: '1rem', borderRadius: 12, background: 'var(--input-bg)', border: '1px solid var(--input-border)', marginBottom: '0.75rem' }}>
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Your Google Device Code</div>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.65rem', background: 'rgba(255, 0, 0, 0.1)', border: '1.5px dashed rgba(255, 0, 0, 0.5)', padding: '0.45rem 1.1rem', borderRadius: 10, marginTop: '0.25rem' }}>
-                                <span style={{ fontSize: '1.25rem', fontWeight: 900, letterSpacing: '0.12em', color: 'var(--text)', fontFamily: 'monospace' }}>{ytmusicLoginData.user_code}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(ytmusicLoginData.user_code);
-                                    setCopiedYTCode(true);
-                                    setTimeout(() => setCopiedYTCode(false), 2000);
-                                  }}
-                                  className="glass-btn icon-btn"
-                                  title="Copy code"
-                                  style={{ width: 26, height: 26, minWidth: 26, minHeight: 26 }}
-                                >
-                                  <Icon name={copiedYTCode ? "check" : "copy"} size={13} style={{ color: copiedYTCode ? '#1db954' : 'currentColor' }} />
-                                </button>
-                              </div>
-                            </div>
-
-                            <a
-                              href={ytmusicLoginData.login_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="glass-btn glass-btn-ytmusic"
-                              style={{ textAlign: 'center', justifyContent: 'center', padding: '0.75rem 1.25rem', fontSize: '0.9rem' }}
-                            >
-                              <span>1. Open Google Device Sign-In</span>
-                              <Icon name="external-link" size={15} />
-                            </a>
-
-                            <button
-                              type="button"
-                              onClick={() => checkYTMusicLogin(false)}
-                              disabled={ytmusicPolling}
-                              className="glass-btn"
-                              style={{ justifyContent: 'center' }}
-                            >
-                              <Icon name={ytmusicPolling ? 'loader' : 'check'} size={15} />
-                              <span>{ytmusicPolling ? 'Checking Google Authorization...' : '2. Verify Connection'}</span>
-                            </button>
-
-                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textAlign: 'center', fontWeight: 600 }}>
-                              <span className="pulse-dot" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ff0000', marginRight: 6 }}></span>
-                              Waiting for approval in browser... Multify connects automatically once approved.
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              onClick={handleSaveSettings}
-                              disabled={isSavingSettings}
-                              className="glass-btn"
-                              style={{ fontSize: '0.82rem' }}
-                            >
-                              <Icon name={isSavingSettings ? 'loader' : 'check'} size={14} />
-                              <span>Save Credentials</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={startYTMusicLogin}
-                              disabled={ytmusicPolling}
-                              className="glass-btn glass-btn-ytmusic"
-                              style={{ fontSize: '0.85rem' }}
-                            >
-                              <Icon name={ytmusicPolling ? 'loader' : 'play-circle'} size={15} />
-                              <span>Connect with Google</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.85rem' }}>
-                      <button
-                        type="button"
-                        onClick={() => setShowLegacyYT(!showLegacyYT)}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: 0 }}
-                      >
-                        <Icon name={showLegacyYT ? "chevron-down" : "chevron-right"} size={14} />
-                        <span>Advanced: Browser Request Headers (Legacy Method)</span>
-                      </button>
-
-                      {showLegacyYT && (
-                        <form onSubmit={handleSaveSettings} style={{ marginTop: '0.85rem' }}>
-                          <div className="settings-field-group">
-                            <label className="settings-label">Raw Request Headers / JSON</label>
+                          <div className="settings-field-group" style={{ marginBottom: '1rem' }}>
+                            <label className="settings-label">Paste Request Headers or Cookie</label>
                             <div className="settings-input-wrapper" style={{ padding: '0.65rem' }}>
                               <textarea
                                 className="settings-textarea"
-                                placeholder='Optional fallback: Paste raw browser request headers from music.youtube.com'
+                                style={{ minHeight: 90, fontFamily: 'monospace', fontSize: '0.78rem' }}
+                                placeholder='accept: */*
+authorization: SAPISIDHASH ...
+cookie: VISITOR_INFO1_LIVE=...; SAPISID=...; __Secure-3PAPISID=...'
                                 value={settingsForm.ytmusic_headers}
                                 onChange={e => setSettingsForm({ ...settingsForm, ytmusic_headers: e.target.value })}
                               />
                             </div>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.65rem' }}>
-                            <button type="submit" disabled={isSavingSettings} className="glass-btn" style={{ fontSize: '0.82rem' }}>
-                              <Icon name={isSavingSettings ? 'loader' : 'check'} size={14} />
-                              <span>Save Legacy Headers</span>
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button type="submit" disabled={isSavingSettings} className="glass-btn glass-btn-ytmusic">
+                              <Icon name={isSavingSettings ? 'loader' : 'check'} size={15} />
+                              <span>Save &amp; Connect</span>
                             </button>
                           </div>
                         </form>
-                      )}
-                    </div>
+
+                        {/* Secondary Method: Google OAuth Flow */}
+                        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.85rem', marginBottom: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => setShowLegacyYT(!showLegacyYT)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: 0 }}
+                          >
+                            <Icon name={showLegacyYT ? "chevron-down" : "chevron-right"} size={14} />
+                            <span>Alternative: Google Cloud OAuth 2.0</span>
+                          </button>
+
+                          {showLegacyYT && (
+                            <div className="settings-panel-card" style={{ padding: '1.15rem', marginTop: '0.85rem' }}>
+                              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, lineHeight: 1.5, marginBottom: '0.85rem' }}>
+                                Connect using your own Google Cloud OAuth Client ID &amp; Secret (TV &amp; Limited Input device flow).
+                              </p>
+
+                              <div className="settings-field-group" style={{ marginBottom: '0.75rem' }}>
+                                <label className="settings-label">Google Client ID</label>
+                                <div className="settings-input-wrapper">
+                                  <Icon name="key" size={16} style={{ color: 'var(--text-muted)' }} />
+                                  <input
+                                    type="text"
+                                    className="settings-input"
+                                    placeholder="e.g. 1234567890-abcdef.apps.googleusercontent.com"
+                                    value={settingsForm.ytmusic_client_id}
+                                    onChange={e => setSettingsForm({ ...settingsForm, ytmusic_client_id: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="settings-field-group" style={{ marginBottom: '1rem' }}>
+                                <label className="settings-label">Google Client Secret</label>
+                                <div className="settings-input-wrapper">
+                                  <Icon name="shield" size={16} style={{ color: 'var(--text-muted)' }} />
+                                  <input
+                                    type={showYTSecret ? "text" : "password"}
+                                    className="settings-input"
+                                    placeholder="e.g. GOCSPX-abc123xyz"
+                                    value={settingsForm.ytmusic_client_secret}
+                                    onChange={e => setSettingsForm({ ...settingsForm, ytmusic_client_secret: e.target.value })}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="settings-toggle-btn"
+                                    onClick={() => setShowYTSecret(!showYTSecret)}
+                                  >
+                                    <Icon name={showYTSecret ? "eye-off" : "eye"} size={16} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {ytmusicLoginData ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '0.85rem', borderRadius: 10, background: 'var(--input-bg)', border: '1px solid var(--input-border)' }}>
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>Your Device Code</div>
+                                    <span style={{ fontSize: '1.2rem', fontWeight: 900, fontFamily: 'monospace' }}>{ytmusicLoginData.user_code}</span>
+                                  </div>
+                                  <a href={ytmusicLoginData.login_url} target="_blank" rel="noreferrer" className="glass-btn glass-btn-ytmusic" style={{ textAlign: 'center', justifyContent: 'center' }}>
+                                    <span>Open Google Device Sign-In</span>
+                                    <Icon name="external-link" size={14} />
+                                  </a>
+                                  <button type="button" onClick={() => checkYTMusicLogin(false)} disabled={ytmusicPolling} className="glass-btn" style={{ justifyContent: 'center' }}>
+                                    <Icon name={ytmusicPolling ? 'loader' : 'check'} size={14} />
+                                    <span>{ytmusicPolling ? 'Checking...' : 'Verify Connection'}</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                                  <button type="button" onClick={startYTMusicLogin} disabled={ytmusicPolling} className="glass-btn glass-btn-ytmusic" style={{ fontSize: '0.82rem' }}>
+                                    <Icon name={ytmusicPolling ? 'loader' : 'play-circle'} size={14} />
+                                    <span>Connect with Google OAuth</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

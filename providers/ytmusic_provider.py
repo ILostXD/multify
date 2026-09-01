@@ -2,6 +2,7 @@ import json
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from ytmusicapi import YTMusic
+from ytmusicapi.auth.oauth import OAuthCredentials
 from providers import BaseProvider
 
 class YouTubeMusicProvider(BaseProvider):
@@ -11,24 +12,29 @@ class YouTubeMusicProvider(BaseProvider):
     icon = "play-circle"
 
     def _get_client(self, config: Dict[str, Any], authenticated_only: bool = False) -> Optional[YTMusic]:
-        # 1. Check if oauth.json exists on disk
-        oauth_path = config.get("ytmusic_oauth_path", "ytmusic_oauth.json")
-        if os.path.isfile(oauth_path):
+        # 1. Check if Google OAuth token JSON exists on disk
+        oauth_path = config.get("ytmusic_oauth_path") or os.environ.get("YTMUSIC_OAUTH_PATH", "ytmusic_oauth.json")
+        client_id = config.get("ytmusic_client_id") or os.environ.get("MULTIFY_YTMUSIC_CLIENT_ID") or os.environ.get("YTMUSIC_CLIENT_ID")
+        client_secret = config.get("ytmusic_client_secret") or os.environ.get("MULTIFY_YTMUSIC_CLIENT_SECRET") or os.environ.get("YTMUSIC_CLIENT_SECRET")
+
+        oauth_creds = None
+        if client_id and client_secret:
             try:
-                return YTMusic(oauth_path)
+                oauth_creds = OAuthCredentials(client_id, client_secret)
             except Exception:
                 pass
 
-        # 2. Check if raw browser headers are provided in config
+        if os.path.isfile(oauth_path):
+            try:
+                return YTMusic(oauth_path, oauth_credentials=oauth_creds)
+            except Exception:
+                pass
+
+        # 2. Check if raw browser headers are provided in config (legacy fallback)
         headers_raw = config.get("ytmusic_headers", "").strip()
         if headers_raw:
             try:
-                # If valid JSON string
-                if headers_raw.startswith("{"):
-                    return YTMusic(headers_raw)
-                # If raw multi-line request headers text
-                else:
-                    return YTMusic(headers_raw)
+                return YTMusic(headers_raw)
             except Exception:
                 pass
 
@@ -95,7 +101,7 @@ class YouTubeMusicProvider(BaseProvider):
         if not client:
             return {
                 "success": False,
-                "error": "YouTube Music is not authenticated. Please provide your OAuth tokens or browser headers in Settings."
+                "error": "YouTube Music is not authenticated. Please connect your Google account in Settings."
             }
 
         try:

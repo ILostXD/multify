@@ -3,5 +3,7 @@
   "spotify_client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
   "spotify_redirect_uri": "http://127.0.0.1:5099/callback",
   "ytmusic_headers": "",
-  "password_hash": ""
+  "password_hash": "",
+  "ytmusic_client_id": "",
+  "ytmusic_client_secret": ""
 }

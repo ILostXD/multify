@@ -242,10 +242,15 @@ def get_settings():
     if is_app_locked():
         return jsonify({"error": "Authentication required", "locked": True}), 401
     cfg = load_config()
+    oauth_file_path = cfg.get("ytmusic_oauth_path") or os.environ.get("YTMUSIC_OAUTH_PATH", "ytmusic_oauth.json")
+    has_ytmusic_oauth = bool(os.path.isfile(oauth_file_path) or cfg.get("ytmusic_has_oauth"))
     return jsonify({
         "spotify_client_id": cfg.get("spotify_client_id", ""),
         "spotify_client_secret": cfg.get("spotify_client_secret", ""),
         "spotify_redirect_uri": cfg.get("spotify_redirect_uri", "http://127.0.0.1:5099/callback"),
+        "ytmusic_client_id": cfg.get("ytmusic_client_id") or os.environ.get("MULTIFY_YTMUSIC_CLIENT_ID") or os.environ.get("YTMUSIC_CLIENT_ID", ""),
+        "ytmusic_client_secret": cfg.get("ytmusic_client_secret") or os.environ.get("MULTIFY_YTMUSIC_CLIENT_SECRET") or os.environ.get("YTMUSIC_CLIENT_SECRET", ""),
+        "has_ytmusic_oauth": has_ytmusic_oauth,
         "ytmusic_headers": cfg.get("ytmusic_headers", ""),
         "has_tidal": bool(cfg.get("tidal_access_token")),
         "is_configured": bool(cfg.get("spotify_client_id") and cfg.get("spotify_client_secret")),
@@ -267,6 +272,10 @@ def update_settings():
         new_cfg["spotify_client_secret"] = str(data["spotify_client_secret"]).strip()
     if "spotify_redirect_uri" in data:
         new_cfg["spotify_redirect_uri"] = str(data["spotify_redirect_uri"]).strip()
+    if "ytmusic_client_id" in data:
+        new_cfg["ytmusic_client_id"] = str(data["ytmusic_client_id"]).strip()
+    if "ytmusic_client_secret" in data:
+        new_cfg["ytmusic_client_secret"] = str(data["ytmusic_client_secret"]).strip()
     if "ytmusic_headers" in data:
         new_cfg["ytmusic_headers"] = str(data["ytmusic_headers"]).strip()
 
@@ -408,11 +417,137 @@ def _refresh_spotify_token_if_needed():
 #  Tidal OAuth Device Flow
 # ─────────────────────────────────────────────────────────────────────────
 
+YTMUSIC_ACTIVE_SESSIONS: Dict[str, Any] = {}
+
+@app.route("/api/ytmusic/login", methods=["POST"])
+def ytmusic_start_login():
+    if is_app_locked():
+        return jsonify({"error": "Authentication required", "locked": True}), 401
+    data = request.get_json() or {}
+    cfg = load_config()
+
+    client_id = data.get("client_id") or cfg.get("ytmusic_client_id") or os.environ.get("MULTIFY_YTMUSIC_CLIENT_ID") or os.environ.get("YTMUSIC_CLIENT_ID", "")
+    client_secret = data.get("client_secret") or cfg.get("ytmusic_client_secret") or os.environ.get("MULTIFY_YTMUSIC_CLIENT_SECRET") or os.environ.get("YTMUSIC_CLIENT_SECRET", "")
+
+    client_id = str(client_id).strip()
+    client_secret = str(client_secret).strip()
+
+    if not client_id or not client_secret:
+        return jsonify({
+            "error": "Google Client ID and Client Secret are required for OAuth. Please enter them in Settings or set environment variables."
+        }), 400
+
+    try:
+        from ytmusicapi.auth.oauth import OAuthCredentials
+        oauth_creds = OAuthCredentials(client_id, client_secret)
+        code_data = oauth_creds.get_code()
+
+        session_id = secrets.token_hex(12)
+        YTMUSIC_ACTIVE_SESSIONS[session_id] = {
+            "oauth_creds": oauth_creds,
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "device_code": code_data["device_code"],
+            "created_at": time.time()
+        }
+
+        verif_url = code_data.get("verification_url", "https://www.google.com/device")
+        user_code = code_data.get("user_code", "")
+        direct_url = f"{verif_url}?user_code={user_code}" if user_code else verif_url
+
+        return jsonify({
+            "session_id": session_id,
+            "user_code": user_code,
+            "verification_url": verif_url,
+            "login_url": direct_url,
+            "expires_in": code_data.get("expires_in", 1800),
+            "interval": code_data.get("interval", 5)
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to start Google OAuth: {str(e)}"}), 500
+
+
+@app.route("/api/ytmusic/check_login", methods=["POST"])
+def ytmusic_check_login():
+    if is_app_locked():
+        return jsonify({"error": "Authentication required", "locked": True}), 401
+    data = request.get_json() or {}
+    session_id = data.get("session_id")
+    sess_obj = YTMUSIC_ACTIVE_SESSIONS.get(session_id)
+    if not sess_obj:
+        return jsonify({"error": "Login session expired or not found. Please click Connect again."}), 400
+
+    oauth_creds = sess_obj["oauth_creds"]
+    device_code = sess_obj["device_code"]
+    client_id = sess_obj["client_id"]
+    client_secret = sess_obj["client_secret"]
+
+    try:
+        res_data = oauth_creds.token_from_code(device_code)
+
+        if isinstance(res_data, dict) and "access_token" in res_data:
+            token_dict = {
+                "access_token": res_data["access_token"],
+                "refresh_token": res_data.get("refresh_token", ""),
+                "scope": res_data.get("scope", "https://www.googleapis.com/auth/youtube"),
+                "token_type": res_data.get("token_type", "Bearer"),
+                "expires_in": res_data.get("expires_in", 3600),
+                "expires_at": int(time.time() + res_data.get("expires_in", 3600))
+            }
+
+            oauth_file_path = os.environ.get("YTMUSIC_OAUTH_PATH", "ytmusic_oauth.json")
+            with open(oauth_file_path, "w", encoding="utf-8") as f:
+                json.dump(token_dict, f, indent=2)
+
+            save_config({
+                "ytmusic_client_id": client_id,
+                "ytmusic_client_secret": client_secret,
+                "ytmusic_oauth_path": oauth_file_path,
+                "ytmusic_has_oauth": True
+            })
+
+            YTMUSIC_ACTIVE_SESSIONS.pop(session_id, None)
+            return jsonify({
+                "success": True,
+                "logged_in": True,
+                "message": "YouTube Music Google OAuth connected successfully!"
+            })
+
+        error_code = res_data.get("error") if isinstance(res_data, dict) else ""
+        if error_code in ("authorization_pending", "slow_down"):
+            return jsonify({"logged_in": False, "status": "pending"})
+        elif error_code == "expired_token":
+            YTMUSIC_ACTIVE_SESSIONS.pop(session_id, None)
+            return jsonify({"error": "Authorization code expired. Please click Connect again."}), 400
+        else:
+            err_msg = res_data.get("error_description") or res_data.get("error") or "Unknown OAuth status"
+            return jsonify({"error": f"Google Auth Error: {err_msg}"}), 400
+
+    except Exception as e:
+        return jsonify({"error": f"Error verifying Google login: {str(e)}"}), 500
+
+
+@app.route("/api/ytmusic/logout", methods=["POST"])
+def ytmusic_logout():
+    if is_app_locked():
+        return jsonify({"error": "Authentication required", "locked": True}), 401
+    oauth_file_path = os.environ.get("YTMUSIC_OAUTH_PATH", "ytmusic_oauth.json")
+    if os.path.isfile(oauth_file_path):
+        try:
+            os.remove(oauth_file_path)
+        except Exception:
+            pass
+    save_config({
+        "ytmusic_has_oauth": False,
+        "ytmusic_headers": ""
+    })
+    return jsonify({"success": True, "message": "YouTube Music disconnected."})
+
+
 TIDAL_ACTIVE_SESSIONS: Dict[str, Any] = {}
 
 @app.route("/api/tidal/login", methods=["POST"])
 def tidal_start_login():
-    """Initiates Tidal OAuth Device flow and returns link URL."""
     try:
         t_session = tidalapi.Session()
         login_key, uri, expires = t_session.login_oauth()
@@ -433,14 +568,13 @@ def tidal_start_login():
 
 @app.route("/api/tidal/check_login", methods=["POST"])
 def tidal_check_login():
-    """Checks if the user completed the Tidal authorization."""
     data = request.get_json() or {}
     session_id = data.get("session_id")
     sess_obj = TIDAL_ACTIVE_SESSIONS.get(session_id)
     if not sess_obj:
         return jsonify({"error": "Login session expired or not found."}), 400
 
-    t_session: tidalapi.Session = sess_obj["session"]
+    t_session = sess_obj["session"]
     login_key = sess_obj["login_key"]
 
     try:
@@ -460,9 +594,17 @@ def tidal_check_login():
         return jsonify({"error": f"Tidal check failed: {str(e)}"}), 400
 
 
-# ─────────────────────────────────────────────────────────────────────────
-#  M3U8 Parsing
-# ─────────────────────────────────────────────────────────────────────────
+@app.route("/api/tidal/logout", methods=["POST"])
+def tidal_logout():
+    if is_app_locked():
+        return jsonify({"error": "Authentication required", "locked": True}), 401
+    save_config({
+        "tidal_token_type": "",
+        "tidal_access_token": "",
+        "tidal_refresh_token": "",
+        "tidal_expiry_time": ""
+    })
+    return jsonify({"success": True, "message": "Tidal disconnected."})
 
 def parse_m3u8(content: str):
     lines = [l.strip() for l in content.splitlines() if l.strip()]

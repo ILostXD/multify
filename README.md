@@ -130,7 +130,13 @@ Navigate to **`http://127.0.0.1:5099`**.
 
 ### YouTube Music
 - **Guest Search**: Works out of the box with zero setup.
-- **Playlist Creation**: Copy your cookie request headers from `music.youtube.com` (via browser DevTools Network tab) and paste them into the YouTube Music settings tab.
+- **Google OAuth Sign-In (Recommended)**:
+  1. Open [Google Cloud Console &rarr; Credentials](https://console.cloud.google.com/apis/credentials) and select or create a project.
+  2. Go to **Enabled APIs & Services** &rarr; click **+ Enable APIs** &rarr; Enable **YouTube Data API v3**.
+  3. Click **Create Credentials** &rarr; **OAuth client ID** &rarr; select Application type: **TVs and Limited Input devices** (or Desktop).
+  4. Enter your Client ID and Client Secret in Multify Settings and click **Connect with Google**.
+  5. Open the authorization link, approve the request in your browser, and Multify connects automatically.
+- **Browser Headers (Legacy Fallback)**: You can also optionally paste raw request headers from `music.youtube.com` under Advanced Settings.
 
 ### Tidal
 1. Open Multify Settings, select **Tidal**, and click **Link Tidal Account**.

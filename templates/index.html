@@ -1711,12 +1711,25 @@
         spotify_client_id: '',
         spotify_client_secret: '',
         spotify_redirect_uri: 'http://127.0.0.1:5099/callback',
+        ytmusic_client_id: '',
+        ytmusic_client_secret: '',
+        has_ytmusic_oauth: false,
         ytmusic_headers: '',
+        has_tidal: false,
         has_password: false,
         is_env_password: false
       });
       const [isSavingSettings, setIsSavingSettings] = useState(false);
       const [settingsStatus, setSettingsStatus] = useState(null);
+
+      /* YouTube Music OAuth State */
+      const [showYTSecret, setShowYTSecret] = useState(false);
+      const [showYTHelp, setShowYTHelp] = useState(false);
+      const [showLegacyYT, setShowLegacyYT] = useState(false);
+      const [ytmusicLoginData, setYtmusicLoginData] = useState(null);
+      const [ytmusicPolling, setYtmusicPolling] = useState(false);
+      const [ytmusicError, setYtmusicError] = useState('');
+      const [copiedYTCode, setCopiedYTCode] = useState(false);
 
       /* Tidal OAuth State */
       const [tidalLoginData, setTidalLoginData] = useState(null);
@@ -1756,7 +1769,11 @@
               spotify_client_id: data.spotify_client_id || '',
               spotify_client_secret: data.spotify_client_secret || '',
               spotify_redirect_uri: data.spotify_redirect_uri || 'http://127.0.0.1:5099/callback',
+              ytmusic_client_id: data.ytmusic_client_id || '',
+              ytmusic_client_secret: data.ytmusic_client_secret || '',
+              has_ytmusic_oauth: Boolean(data.has_ytmusic_oauth),
               ytmusic_headers: data.ytmusic_headers || '',
+              has_tidal: Boolean(data.has_tidal),
               has_password: Boolean(data.has_password),
               is_env_password: Boolean(data.is_env_password)
             }));
@@ -1896,6 +1913,91 @@
         }
       };
 
+      const startYTMusicLogin = async () => {
+        setYtmusicError('');
+        setYtmusicLoginData(null);
+        const cid = (settingsForm.ytmusic_client_id || '').trim();
+        const csec = (settingsForm.ytmusic_client_secret || '').trim();
+
+        if (!cid || !csec) {
+          setYtmusicError('Please enter both your Google Client ID and Client Secret first.');
+          return;
+        }
+
+        // Auto-save credentials
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ytmusic_client_id: cid, ytmusic_client_secret: csec })
+          });
+        } catch (e) {}
+
+        setYtmusicPolling(true);
+        try {
+          const resp = await fetch('/api/ytmusic/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_id: cid, client_secret: csec })
+          });
+          const data = await resp.json();
+          setYtmusicPolling(false);
+          if (data.login_url) {
+            setYtmusicLoginData(data);
+            window.open(data.login_url, '_blank');
+          } else {
+            setYtmusicError(data.error || 'Failed to start Google OAuth.');
+          }
+        } catch (e) {
+          setYtmusicPolling(false);
+          setYtmusicError('Google OAuth network error.');
+        }
+      };
+
+      const checkYTMusicLogin = async (silent = false) => {
+        if (!ytmusicLoginData || !ytmusicLoginData.session_id) return;
+        if (!silent) setYtmusicPolling(true);
+        try {
+          const resp = await fetch('/api/ytmusic/check_login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: ytmusicLoginData.session_id })
+          });
+          const data = await resp.json();
+          if (!silent) setYtmusicPolling(false);
+
+          if (data.success && data.logged_in) {
+            setYtmusicLoginData(null);
+            fetchStatusAndSettings();
+            if (!silent) alert('YouTube Music Google OAuth connected successfully!');
+          } else if (data.status === 'pending') {
+            if (!silent) alert('Waiting for Google authorization... Please approve the prompt in your browser.');
+          } else if (data.error) {
+            if (!silent) alert(data.error);
+            setYtmusicError(data.error);
+          }
+        } catch (e) {
+          if (!silent) {
+            setYtmusicPolling(false);
+            alert('Error verifying YouTube Music authorization.');
+          }
+        }
+      };
+
+      const disconnectYTMusic = async () => {
+        if (!confirm('Are you sure you want to disconnect YouTube Music?')) return;
+        try {
+          const resp = await fetch('/api/ytmusic/logout', { method: 'POST' });
+          const data = await resp.json();
+          if (data.success) {
+            setYtmusicLoginData(null);
+            fetchStatusAndSettings();
+          }
+        } catch (e) {
+          alert('Failed to disconnect YouTube Music.');
+        }
+      };
+
       const startTidalLogin = async () => {
         setTidalLoginData(null);
         try {
@@ -1912,9 +2014,9 @@
         }
       };
 
-      const checkTidalLogin = async () => {
+      const checkTidalLogin = async (silent = false) => {
         if (!tidalLoginData || !tidalLoginData.session_id) return;
-        setTidalPolling(true);
+        if (!silent) setTidalPolling(true);
         try {
           const resp = await fetch('/api/tidal/check_login', {
             method: 'POST',
@@ -1922,19 +2024,53 @@
             body: JSON.stringify({ session_id: tidalLoginData.session_id })
           });
           const data = await resp.json();
-          setTidalPolling(false);
+          if (!silent) setTidalPolling(false);
           if (data.success) {
-            alert('Tidal connected successfully!');
             setTidalLoginData(null);
             fetchStatusAndSettings();
-          } else {
-            alert(data.message || 'Waiting for Tidal authorization...');
+            if (!silent) alert('Tidal connected successfully!');
+          } else if (data.pending) {
+            if (!silent) alert(data.message || 'Waiting for Tidal authorization...');
           }
         } catch (e) {
-          setTidalPolling(false);
-          alert('Tidal check failed.');
+          if (!silent) {
+            setTidalPolling(false);
+            alert('Tidal check failed.');
+          }
         }
       };
+
+      const disconnectTidal = async () => {
+        if (!confirm('Are you sure you want to disconnect Tidal?')) return;
+        try {
+          const resp = await fetch('/api/tidal/logout', { method: 'POST' });
+          const data = await resp.json();
+          if (data.success) {
+            setTidalLoginData(null);
+            fetchStatusAndSettings();
+          }
+        } catch (e) {
+          alert('Failed to disconnect Tidal.');
+        }
+      };
+
+      
+      /* Auto-polling for Google OAuth and Tidal device flows */
+      useEffect(() => {
+        if (!ytmusicLoginData || !ytmusicLoginData.session_id) return;
+        const timer = setInterval(() => {
+          checkYTMusicLogin(true);
+        }, 4000);
+        return () => clearInterval(timer);
+      }, [ytmusicLoginData]);
+
+      useEffect(() => {
+        if (!tidalLoginData || !tidalLoginData.session_id) return;
+        const timer = setInterval(() => {
+          checkTidalLogin(true);
+        }, 4000);
+        return () => clearInterval(timer);
+      }, [tidalLoginData]);
 
       const handleFile = async (file) => {
         if (!file) return;
@@ -2464,8 +2600,8 @@
                   </p>
                   <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => { setSettingsTab('ytmusic'); setShowSettings(true); }} className="glass-btn glass-btn-ytmusic" style={{ padding: '0.8rem 2.2rem', fontSize: '0.95rem' }}>
-                      <Icon name="plus" size={18} />
-                      <span>Connect Headers</span>
+                      <Icon name="play-circle" size={18} />
+                      <span>Connect Google Account</span>
                     </button>
                     <button onClick={() => setGuestMode(prev => ({ ...prev, ytmusic: true }))} className="glass-btn" style={{ padding: '0.8rem 1.4rem', fontSize: '0.95rem' }}>
                       <Icon name="play-circle" size={16} />
